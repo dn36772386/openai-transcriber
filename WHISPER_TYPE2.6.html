@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<title>OpenAI Transcriber v3.6 (IDB)</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+
+<!-- ── libs ─────────────────────────────────────── -->
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.1/dist/ort.min.js"></script>
+<script>ort.env.wasm.numThreads=1;ort.env.logLevel='error';</script>
+<script src="https://cdn.jsdelivr.net/npm/@ricky0123/vad/dist/index.browser.js"></script>
+<link  rel="stylesheet"
+       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+
+<!-- ── style（省略可：レイアウトは前版と同一） ───────────────── -->
+<style>
+:root{--bg:#f7f7f8;--sidebar:#fff;--accent:#10a37f;--icon:#334155;--hover:#111827;
+      --border:#e5e7eb;--danger:#dc2626;--card:#fff}
+*{box-sizing:border-box;margin:0;padding:0}
+body{display:flex;height:100vh;font-family:"Segoe UI",sans-serif;background:var(--bg);color:#222;overflow:hidden}
+#sidebar{width:240px;min-width:60px;background:var(--sidebar);border-right:1px solid var(--border);
+         display:flex;flex-direction:column;transition:width .25s}
+#sidebar.collapsed{width:60px}
+#sidebar header{display:flex;align-items:center;padding:12px}
+#toggle{background:none;border:none;font-size:20px;color:var(--icon);cursor:pointer}
+#toggle:hover{color:var(--hover)}
+nav{flex:1;overflow-y:auto}
+.menu-item{display:flex;align-items:center;padding:10px 14px;cursor:pointer;border-left:4px solid transparent;
+           transition:.2s}
+.menu-item i{width:24px;color:var(--icon)}.menu-item span{margin-left:10px;color:var(--icon)}
+.menu-item:hover{background:var(--bg)}.menu-item:hover i,.menu-item:hover span{color:var(--hover)}
+.menu-item.active{border-left-color:var(--accent)}.menu-item.active i,.menu-item.active span{color:var(--accent)}
+#sidebar.collapsed .menu-item{justify-content:center}
+#sidebar.collapsed .menu-item span{display:none}
+#histHeader{padding:6px 14px;font-size:14px;color:#6b7280;border-top:1px solid var(--border);
+            display:flex;justify-content:space-between;align-items:center}
+#clearAll{background:none;border:none;color:var(--danger);cursor:pointer}
+#histList{list-style:none;max-height:200px;overflow-y:auto}
+.hist{display:flex;align-items:center;padding:6px 14px;cursor:pointer;transition:.2s}
+.hist:hover{background:var(--bg)}.hist.selected{background:rgba(16,163,127,.12)}
+.hist span{flex:1;white-space:nowrap;text-overflow:ellipsis;overflow:hidden;color:var(--icon)}
+.btnDel{background:none;border:none;color:var(--danger);cursor:pointer;font-size:14px;visibility:hidden}
+.hist:hover .btnDel{visibility:visible}#sidebar.collapsed .hist span{display:none}
+#main{flex:1;display:flex;flex-direction:column;padding:18px;overflow:hidden}
+.section{margin-bottom:14px}.section h2{font-size:16px;margin-bottom:6px}
+.box{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:8px;overflow-y:auto}
+#summary{height:110px}#result{flex:1;margin-top:6px}
+.msg{display:flex;gap:8px;padding:4px;border-radius:4px;cursor:pointer}.msg:hover{background:var(--bg)}
+.ts{width:60px;font-size:12px;color:#6b7280}.txt{background:#fff;border-radius:4px;padding:4px 6px;flex:1}
+#counter{font-size:14px;color:#475569;margin-left:4px}audio{width:100%;margin-top:10px;border-radius:4px}
+.modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.3)}
+.modal.open{display:flex}.modal-box{background:#fff;padding:16px;border-radius:6px;width:260px;box-shadow:0 4px 12px rgba(0,0,0,.25)}
+.modal-box input{width:100%;padding:6px;border:1px solid var(--border);border-radius:4px;margin-top:6px}
+.modal-box button{margin-top:10px;width:100%;padding:8px;border:none;border-radius:4px;background:var(--accent);color:#fff;cursor:pointer}
+</style>
+</head>
+
+<body>
+<!-- ── sidebar ───────────────────────── -->
+<aside id="sidebar">
+  <header><button id="toggle"><i class="fas fa-bars"></i></button><span id="logo">Transcriber</span></header>
+  <nav>
+    <div class="menu-item" data-act="record"><i class="fa-solid fa-microphone"></i><span>文字起こし</span></div>
+    <div class="menu-item" data-act="summarize"><i class="fa-solid fa-align-left"></i><span>要約</span></div>
+    <div class="menu-item" data-act="download"><i class="fa-solid fa-download"></i><span>テキストDL</span></div>
+    <div class="menu-item" data-act="settings"><i class="fa-solid fa-gear"></i><span>設定</span></div>
+  </nav>
+  <div id="histHeader">履歴<button id="clearAll"><i class="fa-solid fa-trash"></i></button></div>
+  <ul id="histList"></ul>
+</aside>
+
+<!-- ── main ──────────────────────────── -->
+<section id="main">
+  <div class="section"><h2>要約結果</h2><div id="summary" class="box"></div></div>
+  <div class="section">
+    <h2>文字起こし結果<span id="counter"></span></h2>
+    <div id="result" class="box"></div>
+    <audio id="player" controls></audio>
+  </div>
+</section>
+
+<!-- ── modal ─────────────────────────── -->
+<div id="modal" class="modal">
+  <div class="modal-box">
+    <h3>OpenAI APIキー</h3>
+    <input id="apiKey" type="password" placeholder="sk-…" />
+    <button id="saveKey">保存</button>
+  </div>
+</div>
+
+<script>
+/* ---------- util ---------- */
+const $ = s => document.querySelector(s), pad = n => String(n).padStart(2,'0');
+let apiKey = localStorage.getItem('oa-key') || '';
+
+/* ---------- 状態 ---------- */
+let vadE, rec=false, timer, tick, remainMs=7200000;
+let segs=[], queue=[], busy=false;
+
+/* ===  IndexedDB  ======================================= */
+let db; const maxHist=10;
+function openDB(){
+  return new Promise((ok,ng)=>{
+    const rq=indexedDB.open('whisperDB',1);
+    rq.onupgradeneeded=e=>{
+      const o=e.target.result;
+      if(!o.objectStoreNames.contains('hist')){
+        const s=o.createObjectStore('hist',{keyPath:'time'});
+        s.createIndex('timeIdx','time');
+      }
+    };
+    rq.onsuccess=e=>{db=e.target.result;ok();};
+    rq.onerror  =e=>ng(e.target.error);
+  });
+}
+async function getAllHist(){
+  await openDB();
+  return new Promise(r=>{
+    const tx=db.transaction('hist','readonly')
+               .objectStore('hist').index('timeIdx').getAll();
+    tx.onsuccess=()=>r(tx.result.reverse());
+  });
+}
+async function putHist(rec){
+  await openDB();
+  const tx=db.transaction('hist','readwrite').objectStore('hist');
+  tx.put(rec);
+  /* 上限超過なら古い1件削除 */
+  tx.index('timeIdx').openCursor(null,'next').onsuccess=e=>{
+    const c=e.target.result; if(!c)return;
+    tx.count().onsuccess=ev=>{
+      if(ev.target.result>maxHist) c.delete();
+    };
+  };
+}
+async function deleteHistItem(key){
+  await openDB();
+  return db.transaction('hist','readwrite').objectStore('hist').delete(key);
+}
+async function clearAllHist(){
+  await openDB();
+  return db.transaction('hist','readwrite').objectStore('hist').clear();
+}
+
+/* ===  履歴 UI  ========================================= */
+async function drawHist(){
+  const ul=$('#histList'); ul.innerHTML='';
+  (await getAllHist()).forEach(h=>{
+    const li=document.createElement('li');li.className='hist';li.dataset.key=h.time;
+    li.innerHTML=`<span>${h.title||h.time}</span><button class="btnDel"><i class="fa-solid fa-xmark"></i></button>`;
+    li.onclick=()=>openHist(h.time);
+    li.querySelector('.btnDel').onclick=e=>{e.stopPropagation();deleteHistItem(h.time).then(drawHist);};
+    ul.append(li);
+  });
+}
+function markSel(key){
+  document.querySelectorAll('.hist').forEach(l=>l.classList.remove('selected'));
+  const s=$(`.hist[data-key="${key}"]`);if(s)s.classList.add('selected');
+}
+async function openHist(key){
+  $('#player').src='';$('#player').load();
+  const tx=db.transaction('hist','readonly').objectStore('hist').get(key);
+  tx.onsuccess=()=>{const h=tx.result;if(!h)return;
+    $('#result').innerHTML=h.html; segs=h.segs||[]; attachClicks();
+    $('#summary').textContent=h.summary||''; markSel(key);
+  };
+}
+async function pushHist(){
+  if(!segs.length)return;
+  const d=new Date(), time=`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  await putHist({time,html:$('#result').innerHTML,segs:[...segs],title:time,summary:$('#summary').textContent});
+  drawHist(); markSel(time);
+}
+
+/* ===  UI イベント  ===================================== */
+$('#toggle').onclick=()=>$('#sidebar').classList.toggle('collapsed');
+$('#saveKey').onclick=()=>{apiKey=$('#apiKey').value.trim();localStorage.setItem('oa-key',apiKey);$('#modal').classList.remove('open');};
+$('#modal').onclick=e=>{if(e.target===e.currentTarget)$('#modal').classList.remove('open');};
+$('#clearAll').onclick=()=>{if(confirm('全履歴を削除しますか？'))clearAllHist().then(drawHist);};
+document.querySelectorAll('.menu-item').forEach(el=>el.onclick=()=>dispatch(el.dataset.act));
+
+/* ===  Whisper 送信キュー  ============================== */
+function enqueue(file,url,segIdx){queue.push({file,url,segIdx});if(!busy)processQueue();}
+async function processQueue(){
+  if(busy)return; busy=true;
+  const WAIT=10,COOL=300;
+  while(queue.length){
+    const job=queue.shift();
+    try{
+      const fd=new FormData();fd.append('file',job.file);fd.append('model','whisper-1');fd.append('language','ja');
+      const res=await fetch('https://api.openai.com/v1/audio/transcriptions',{method:'POST',headers:{Authorization:`Bearer ${apiKey}`},body:fd});
+      if(res.status===429){
+        const w=+(res.headers.get('Retry-After')||job.backoff||WAIT);
+        job.backoff=Math.min(w*2,60);queue.unshift(job);await new Promise(r=>setTimeout(r,w*1000));continue;
+      }
+      if(!res.ok)throw new Error(res.status);
+      const js=await res.json();replaceSeg(job.segIdx,js.text||'(無音)');
+    }catch(e){console.error(e);replaceSeg(job.segIdx,'【エラー】');}
+    await new Promise(r=>setTimeout(r,COOL));
+  }
+  busy=false;
+}
+
+/* ===  録音制御  ======================================== */
+async function startRec(){
+  if(!apiKey){openModal();return;}
+  if(!vadE){
+    vadE=await vad.MicVAD.new({
+      noise_threshold:0.15,
+      positiveSpeechThreshold:0.6,
+      negativeSpeechThreshold:0.3,
+      onSpeechEnd:arr=>handleChunk(arr)
+    });
+  }
+  queue=[];busy=false;$('#player').src='';$('#player').load();
+  await vadE.start();rec=true;segs=[];$('#result').innerHTML='';$('#summary').textContent='';
+  remainMs=7200000;timer=setTimeout(stopRec,remainMs);
+  tick=setInterval(()=>{remainMs-=1000;$('#counter').textContent=` 残り ${Math.floor(remainMs/60000)}:${pad((remainMs/1000)%60)}`;},1000);
+  updateRecLabel();
+}
+function stopRec(){if(vadE)vadE.pause();rec=false;clearTimeout(timer);clearInterval(tick);$('#counter').textContent='';pushHist();updateRecLabel();}
+function updateRecLabel(){document.querySelector('[data-act="record"] span').textContent=rec?'停止':'文字起こし';}
+
+/* ===  チャンク → Whisper  ============================== */
+async function handleChunk(arr){
+  const blob=new Blob([vad.utils.encodeWAV(arr)],{type:'audio/wav'});
+  const dataUrl=await new Promise(r=>{const fr=new FileReader();fr.onload=()=>r(fr.result);fr.readAsDataURL(blob);});
+  const idx=appendSeg('…文字起こし中…',dataUrl,true);
+  enqueue(blob,dataUrl,idx);
+}
+
+/* ===  表示行ユーティリティ  ============================ */
+function appendSeg(text,audio,loading=false){
+  const now=new Date(), ts=`${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+  const idx=segs.push({ts,text,audio})-1;
+  const div=document.createElement('div');div.className='msg';div.dataset.idx=idx;
+  div.innerHTML=`<span class='ts'>${ts}</span><div class='txt'>${text}</div>`;
+  div.onclick=()=>{$('#player').src=audio;$('#player').play();};
+  $('#result').append(div);if(!loading)$('#result').scrollTop=$('#result').scrollHeight;
+  return idx;
+}
+function replaceSeg(i,text){if(i<0||i>=segs.length)return;segs[i].text=text;
+  const n=$(`#result .msg[data-idx="${i}"] .txt`);if(n){n.textContent=text;}}
+function attachClicks(){document.querySelectorAll('.msg').forEach(el=>{
+  const i=+el.dataset.idx, a=segs[i].audio||'';if(!a.startsWith('data:'))return;
+  el.onclick=()=>{$('#player').src=a;$('#player').play();};});
+}
+
+/* ===  GPT 要約 & DL 等（前版と同一）  =================== */
+async function summarize(){
+  if(!apiKey){openModal();return;}
+  const t=$('#result').innerText.trim();if(!t){alert('文字起こし結果がありません');return;}
+  const btn=document.querySelector('[data-act="summarize"]');btn.classList.add('active');
+  try{
+    const body={model:'gpt-4o-mini',temperature:0.7,
+      messages:[{role:'system',content:'タイトル + 箇条書きで日本語要約'},{role:'user',content:t}]};
+    const res=await fetch('https://api.openai.com/v1/chat/completions',
+      {method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${apiKey}`},
+       body:JSON.stringify(body)});
+    const js=await res.json();$('#summary').textContent=js.choices?.[0]?.message?.content||'';
+  }catch(e){alert('要約失敗');console.error(e);}finally{btn.classList.remove('active');}
+}
+function downloadTxt(){const t=$('#result').innerText;if(!t){alert('データがありません');return;}
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'text/plain'}));
+  a.download='transcript.txt';a.click();}
+function openModal(){$('#apiKey').value=apiKey;$('#modal').classList.add('open');}
+
+/* ===  dispatcher ======================================= */
+function dispatch(act){
+  document.querySelectorAll('.menu-item').forEach(m=>m.classList.remove('active'));
+  document.querySelector(`[data-act="${act}"]`).classList.add('active');
+  switch(act){case'record':rec?stopRec():startRec();break;
+    case'summarize':summarize();break;case'download':downloadTxt();break;case'settings':openModal();break;}
+}
+
+/* ===  init ============================================= */
+openDB().then(drawHist);
+if(!apiKey) openModal();
+</script>
+</body>
+</html>
