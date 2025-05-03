@@ -44,6 +44,20 @@ nav{flex:1;overflow-y:auto}
 }
 #toggle:hover{color:var(--hover)}
 
+/* ─ 録音インジケータ ─ */
+#recMark{
+  display:none;                 /* 非録音時は非表示 */
+  width:8px;height:8px;
+  margin-left:6px;
+  border-radius:50%;
+  background:#dc2626;           /* 赤 */
+  animation:blink 1s infinite;
+}
+@keyframes blink{
+  0%,100%{opacity:1}
+  50%{opacity:.15}
+}
+
 /* メニュー項目 */
 .menu-item{
   display:flex;align-items:center;padding:10px 14px;cursor:pointer;
@@ -167,7 +181,10 @@ audio{width:100%;margin-top:10px;border-radius:4px}
 
 <body>
 <!-- トグルボタン -->
-<button id="toggle"><i class="fas fa-bars"></i></button>
+<button id="toggle">
+  <i class="fas fa-bars"></i>
+  <span id="recMark"></span>  <!-- 録音インジケータ -->
+</button>
 
 <!-- ── sidebar ───────────────────────── -->
 <aside id="sidebar">
@@ -387,8 +404,17 @@ async function startRec(){
   updateRecLabel();
 }
 function stopRec(){if(vadE)vadE.pause();rec=false;clearTimeout(timer);clearInterval(tick);
-  $('#counter').textContent='';pushHist();updateRecLabel();}
-function updateRecLabel(){document.querySelector('[data-act="record"] span').textContent=rec?'停止':'文字起こし';}
+  $('#counter').textContent='';
+  pushHist();
+  updateRecLabel();
+  /* 録音メニューの選択状態を解除して通常表示に戻す */
+  document.querySelector('[data-act="record"]').classList.remove('active');
+}
+function updateRecLabel(){
+  document.querySelector('[data-act="record"] span').textContent = rec ? '停止' : '文字起こし';
+  /* インジケータ表示切替 */
+  document.getElementById('recMark').style.display = rec ? 'inline-block' : 'none';
+}
 
 /* ===  チャンク処理  ==================================== */
 async function handleChunk(arr){
