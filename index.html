@@ -46,17 +46,15 @@ nav{flex:1;overflow-y:auto}
 
 /* ─ 録音インジケータ ─ */
 #recMark{
-  display:none;                 /* 非録音時は非表示 */
-  width:8px;height:8px;
-  margin-left:6px;
-  border-radius:50%;
-  background:#dc2626;           /* 赤 */
-  animation:blink 1s infinite;
+  display:none; width:9px;height:9px;margin-left:6px;border-radius:50%;
+  background:#dc2626; animation:blink 1s infinite;
 }
-@keyframes blink{
-  0%,100%{opacity:1}
-  50%{opacity:.15}
-}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+
+/* サイドバー「文字起こし」アイコン点滅 */
+.rec-on i, .rec-on span{color:var(--accent)}
+.rec-on i{animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
 
 /* メニュー項目 */
 .menu-item{
@@ -416,7 +414,9 @@ function stopRec(){
   $('#counter').textContent = '';
   pushHist();                 // 履歴保存
   updateRecLabel();           // ラベル「文字起こし」へ戻す
-  document.querySelector('[data-act="record"]').classList.remove('active'); // 色（.active）解除
+  const itm = document.querySelector('[data-act="record"]');
+  itm.classList.remove('active');        // 通常色に戻す
+  itm.classList.remove('rec-on');        // 点滅も停止
 }
 
 /* ===  チャンク処理  ==================================== */
