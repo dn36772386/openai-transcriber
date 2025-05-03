@@ -56,6 +56,15 @@ nav{flex:1;overflow-y:auto}
 .rec-on i{animation:pulse 1s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
 
+/* オーディオプレーヤーコントロール点滅 */
+audio.recording {
+  animation: control-blink 1.5s infinite;
+}
+@keyframes control-blink {
+  0%, 100% { accent-color: var(--accent); }
+  50% { accent-color: var(--danger); }
+}
+
 /* メニュー項目 */
 .menu-item{
   display:flex;align-items:center;padding:10px 14px;cursor:pointer;
@@ -147,7 +156,7 @@ audio{width:100%;margin-top:10px;border-radius:4px}
   }
   #sidebar.open{ transform:none; }
 
-  /* モバイルでは折り畳み幅を統一 ―― collapsed を無効化 */
+  /* モバイルでは折り畟み幅を統一 ―― collapsed を無効化 */
   #sidebar.collapsed{ width:80vw; }
 
   /* メニューと履歴を縦に並べ、履歴リストに自動高さを与える */
@@ -420,6 +429,9 @@ async function startRec(){
   remainMs=7200000;timer=setTimeout(stopRec,remainMs);
   tick=setInterval(()=>{remainMs-=1000;$('#counter').textContent=` 残り ${Math.floor(remainMs/60000)}:${pad((remainMs/1000)%60)}`;},1000);
   updateRecLabel();
+  
+  // オーディオプレーヤーに点滅クラスを追加
+  $('#player').classList.add('recording');
 }
 function stopRec(){
   if(vadE) vadE.pause();
@@ -432,6 +444,9 @@ function stopRec(){
   const itm = document.querySelector('[data-act="record"]');
   itm.classList.remove('active');        // 通常色に戻す
   itm.classList.remove('rec-on');        // 点滅も停止
+  
+  // オーディオプレーヤーの点滅を停止
+  $('#player').classList.remove('recording');
 }
 
 /* ===  チャンク処理  ==================================== */
