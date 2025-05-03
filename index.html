@@ -114,7 +114,11 @@ nav{flex:1;overflow-y:auto}
 .ts{width:60px;font-size:12px;color:#6b7280}
 .txt{background:#fff;border-radius:4px;padding:4px 6px;flex:1;white-space:pre-wrap}
 .msg.summary .ts{width:auto;font-weight:600;color:var(--accent)}
-#counter{font-size:14px;color:#475569;margin-left:4px}
+#counter{
+  font-size:14px;
+  color:#475569;
+  margin:4px 0 6px;
+}
 audio{width:100%;margin-top:10px;border-radius:4px}
 
 /* ── modal ───────────────────────── */
@@ -215,6 +219,7 @@ audio{width:100%;margin-top:10px;border-radius:4px}
 <section id="main">
   <div class="section"><div id="summary" class="box"></div></div>
   <div class="section">
+    <div id="counter"></div>        <!-- ← 復活させた残り時間表示 -->
     <div id="result" class="box"></div>
     <audio id="player" controls></audio>
   </div>
@@ -403,17 +408,15 @@ async function startRec(){
   tick=setInterval(()=>{remainMs-=1000;$('#counter').textContent=` 残り ${Math.floor(remainMs/60000)}:${pad((remainMs/1000)%60)}`;},1000);
   updateRecLabel();
 }
-function stopRec(){if(vadE)vadE.pause();rec=false;clearTimeout(timer);clearInterval(tick);
-  $('#counter').textContent='';
-  pushHist();
-  updateRecLabel();
-  /* 録音メニューの選択状態を解除して通常表示に戻す */
-  document.querySelector('[data-act="record"]').classList.remove('active');
-}
-function updateRecLabel(){
-  document.querySelector('[data-act="record"] span').textContent = rec ? '停止' : '文字起こし';
-  /* インジケータ表示切替 */
-  document.getElementById('recMark').style.display = rec ? 'inline-block' : 'none';
+function stopRec(){
+  if(vadE) vadE.pause();
+  rec = false;
+  clearTimeout(timer);
+  clearInterval(tick);
+  $('#counter').textContent = '';
+  pushHist();                 // 履歴保存
+  updateRecLabel();           // ラベル「文字起こし」へ戻す
+  document.querySelector('[data-act="record"]').classList.remove('active'); // 色（.active）解除
 }
 
 /* ===  チャンク処理  ==================================== */
