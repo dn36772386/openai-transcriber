@@ -314,6 +314,22 @@ $('#backdrop').addEventListener('click',()=>{
   $('#backdrop').classList.remove('show');
 });
 
+/* サイドバーを閉じるユーティリティ（モバイルと PC を両立） */
+function closeSidebar(){
+  const sb=$('#sidebar'), bd=$('#backdrop'),
+        isMobile=window.matchMedia('(max-width:768px)').matches;
+  if(isMobile){
+    if(sb.classList.contains('open')){
+      sb.classList.remove('open');
+      bd.classList.remove('show');
+    }
+  }else{
+    if(!sb.classList.contains('collapsed')){
+      sb.classList.add('collapsed');
+    }
+  }
+}
+
 $('#saveKey').onclick=()=>{
   apiKey=$('#apiKey').value.trim();
   localStorage.setItem('oa-key',apiKey);
@@ -321,7 +337,15 @@ $('#saveKey').onclick=()=>{
 };
 $('#modal').onclick=e=>{if(e.target===e.currentTarget)$('#modal').classList.remove('open');};
 $('#clearAll').onclick=()=>{if(confirm('全履歴を削除しますか？')) clearAllHist().then(drawHist);};
-document.querySelectorAll('.menu-item').forEach(el=>el.onclick=()=>dispatch(el.dataset.act));
+document.querySelectorAll('.menu-item').forEach(el=>{
+  el.onclick=()=>{
+    dispatch(el.dataset.act);
+    closeSidebar();
+  };
+});
+
+/* 本文側を触ったらサイドバーを閉じる（PC でも有効） */
+document.getElementById('main').addEventListener('click', closeSidebar);
 
 /* ===  Whisper 送信キュー  ============================== */
 function enqueue(file,url,segIdx){queue.push({file,url,segIdx});if(!busy)processQueue();}
