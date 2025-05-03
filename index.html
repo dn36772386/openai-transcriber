@@ -32,7 +32,8 @@ body{
   display:flex;flex-direction:column;transition:width .25s;
 }
 #sidebar.collapsed{width:60px}
-#sidebar header{display:flex;align-items:center;padding:12px}
+#sidebar.collapsed #logo{display:none}
+#sidebar header{display:flex;align-items:center;justify-content:center;padding:12px 0}
 #logo{white-space:nowrap;margin-left:8px;font-weight:600;font-size:18px}
 nav{flex:1;overflow-y:auto}
 
@@ -151,7 +152,7 @@ audio{width:100%;margin-top:10px;border-radius:4px}
 
 <body>
 <!-- ── sidebar ───────────────────────── -->
-<aside id="sidebar">
+<aside id="sidebar" class="collapsed">
   <header>
     <button id="toggle"><i class="fas fa-bars"></i></button>
     <span id="logo">Transcriber</span>
