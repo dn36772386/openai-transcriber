@@ -78,19 +78,28 @@ nav{flex:1;overflow-y:auto}
 .btnDel:hover i,#clearAll:hover i{color:var(--danger)}
 
 /* ── main ───────────────────────── */
-#main{flex:1;display:flex;flex-direction:column;padding:18px;overflow:hidden}
+#main{
+  flex:1;
+  display:flex;
+  flex-direction:column;
+  padding:18px;
+  overflow-y:auto;              /* ← ここを auto にして縦スクロールを許可 */
+  overflow-x:hidden;            /* 横方向は従来どおり隠す */
+  -webkit-overflow-scrolling:touch; /* iOS で慣性スクロール */
+}
 .section{margin-bottom:14px}
 .section h2{font-size:16px;margin-bottom:6px}
 .box{
   background:var(--card);border:1px solid var(--border);
   border-radius:6px;padding:8px;overflow-y:auto
 }
-#summary{height:110px}
+#summary{display:none}                               /* 旧ボックスは非表示 */
 #result{flex:1;margin-top:6px}
 .msg{display:flex;gap:8px;padding:4px;border-radius:4px;cursor:pointer}
 .msg:hover{background:var(--bg)}
 .ts{width:60px;font-size:12px;color:#6b7280}
 .txt{background:#fff;border-radius:4px;padding:4px 6px;flex:1;white-space:pre-wrap}
+.msg.summary .ts{width:auto;font-weight:600;color:var(--accent)}
 #counter{font-size:14px;color:#475569;margin-left:4px}
 audio{width:100%;margin-top:10px;border-radius:4px}
 
@@ -169,7 +178,7 @@ audio{width:100%;margin-top:10px;border-radius:4px}
   <nav id="menu">
     <div class="menu-item" data-act="record"><i class="fa-solid fa-microphone"></i><span>文字起こし</span></div>
     <div class="menu-item" data-act="summarize"><i class="fa-solid fa-align-left"></i><span>要約</span></div>
-    <div class="menu-item" data-act="download"><i class="fa-solid fa-download"></i><span>テキストDL</span></div>
+    <div class="menu-item" data-act="download"><i class="fa-solid fa-copy"></i><span>コピー</span></div>
     <div class="menu-item" data-act="settings"><i class="fa-solid fa-gear"></i><span>設定</span></div>
 
     <!-- ─ history moved here ─ -->
@@ -318,7 +327,7 @@ document.querySelectorAll('.menu-item').forEach(el=>el.onclick=()=>dispatch(el.d
 /* ===  Whisper 送信キュー  ============================== */
 function enqueue(file,url,segIdx){queue.push({file,url,segIdx});if(!busy)processQueue();}
 async function processQueue(){
-  if(busy)return; busy=true;
+  if(busy)return;busy=true;
   const WAIT=10,COOL=300;
   while(queue.length){
     const job=queue.shift();
@@ -394,14 +403,25 @@ async function summarize(){
     const res=await fetch('https://api.openai.com/v1/chat/completions',
       {method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${apiKey}`},
        body:JSON.stringify(body)});
-    const js=await res.json();$('#summary').textContent=js.choices?.[0]?.message?.content||'';
+    const js=await res.json();
+    const summaryText = js.choices?.[0]?.message?.content || '';
+    /* 既存の要約行を除去してから先頭に挿入 */
+    const old = document.querySelector('.msg.summary'); if(old) old.remove();
+    const div = document.createElement('div'); div.className = 'msg summary';
+    div.innerHTML = `<span class="ts">要約</span><div class="txt">${summaryText}</div>`;
+    const box = document.getElementById('result');
+    box.insertBefore(div, box.firstChild);
   }catch(e){alert('要約失敗');console.error(e);}finally{btn.classList.remove('active');}
 }
 function downloadTxt(){
   const txt=$('#result').innerText;if(!txt){alert('データがありません');return;}
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(new Blob([txt],{type:'text/plain'}));
-  a.download='transcript.txt';a.click();
+  if(!navigator.clipboard){
+    alert('クリップボード API が利用できません');
+    return;
+  }
+  navigator.clipboard.writeText(txt)
+    .then(()=>alert('文字起こし結果をコピーしました'))
+    .catch(()=>alert('コピーに失敗しました'));
 }
 function openModal(){$('#apiKey').value=apiKey;$('#modal').classList.add('open');}
 
