@@ -44,12 +44,11 @@ nav{flex:1;overflow-y:auto}
 }
 #toggle:hover{color:var(--hover)}
 
-/* ─ 録音インジケータ ─ */
-#recMark{
-  display:none; width:9px;height:9px;margin-left:6px;border-radius:50%;
-  background:#dc2626; animation:blink 1s infinite;
+/* ハンバーガーボタン自体をインジケータ化 */
+#toggle.rec-on i{
+  color:#dc2626;          /* 録音中は赤 */
+  animation:pulse 1s infinite;
 }
-@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
 
 /* サイドバー「文字起こし」アイコン点滅 */
 .rec-on i, .rec-on span{color:var(--accent)}
@@ -194,7 +193,6 @@ audio{width:100%;margin-top:10px;border-radius:4px}
 <!-- トグルボタン -->
 <button id="toggle">
   <i class="fas fa-bars"></i>
-  <span id="recMark"></span>  <!-- 録音インジケータ -->
 </button>
 
 <!-- ── sidebar ───────────────────────── -->
@@ -399,17 +397,16 @@ async function processQueue(){
 }
 
 /* ===  録音制御  ======================================== */
-// 録音関連ユーティリティの近くに配置して下さい
-function updateRecLabel(){
+function updateRecLabel() {
   const item = document.querySelector('[data-act="record"]');
   if(!item) return;                     // 念のため null ガード
 
   /* ボタン表示切替 */
   item.querySelector('span').textContent = rec ? '停止' : '文字起こし';
 
-  /* ハンバーガー横の赤点 */
-  document.getElementById('recMark').style.display =
-      rec ? 'inline-block' : 'none';
+  /* ハンバーガーアイコンを点滅させる */
+  const tg = document.getElementById('toggle');
+  tg.classList.toggle('rec-on', rec);
 
   /* サイドバーアイコンの点滅と配色 */
   item.classList.toggle('rec-on', rec);
