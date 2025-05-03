@@ -146,8 +146,11 @@ audio{width:100%;margin-top:10px;border-radius:4px}
   }
   #backdrop.show{ display:block; }
 
-  /* サイドバーが出ているときはラベルを出す */
-  #sidebar .menu-item span{display:inline-block}
+  /* サイドバーが開いているときはラベルを表示 */
+  #sidebar.open .menu-item span{ display:inline-block; }
+
+  /* ハンバーガー分の左右重なりを避けるため本文に左余白を付与 */
+  #mainInner{ padding-left:60px; }
 }
 
 </style>
@@ -158,7 +161,7 @@ audio{width:100%;margin-top:10px;border-radius:4px}
 <button id="toggle"><i class="fas fa-bars"></i></button>
 
 <!-- ── sidebar ───────────────────────── -->
-<aside id="sidebar" class="collapsed">
+<aside id="sidebar">
   <header>
     <span id="logo">Transcriber</span>
   </header>
@@ -419,6 +422,8 @@ const mq = window.matchMedia('(max-width:768px)');
 function applyNarrow(e){ document.body.classList.toggle('narrow', e.matches); }
 mq.addEventListener('change',applyNarrow);  // リサイズ時
 applyNarrow(mq);                            // 読み込み時
+// PC 幅なら初期状態を折り畳み（collapsed）にする
+if(!mq.matches){ document.getElementById('sidebar').classList.add('collapsed'); }
 
 /* ===  init ============================================= */
 openDB().then(drawHist);
