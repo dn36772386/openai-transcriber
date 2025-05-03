@@ -390,6 +390,21 @@ async function processQueue(){
 }
 
 /* ===  録音制御  ======================================== */
+// 録音関連ユーティリティの近くに配置して下さい
+function updateRecLabel(){
+  const item = document.querySelector('[data-act="record"]');
+  if(!item) return;                     // 念のため null ガード
+
+  /* ボタン表示切替 */
+  item.querySelector('span').textContent = rec ? '停止' : '文字起こし';
+
+  /* ハンバーガー横の赤点 */
+  document.getElementById('recMark').style.display =
+      rec ? 'inline-block' : 'none';
+
+  /* サイドバーアイコンの点滅と配色 */
+  item.classList.toggle('rec-on', rec);
+}
 async function startRec(){
   if(!apiKey){openModal();return;}
   if(!vadE){
