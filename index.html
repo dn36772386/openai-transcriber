@@ -18,18 +18,7 @@
 :root{
   --bg:#f7f7f8;--sidebar:#fff;--accent:#10a37f;--icon:#334155;--hover:#111827;
   --border:#e5e7eb;--danger:#dc2626;--card:#fff;
-  --header-h:48px;                      /* ヘッダー高さ */
 }
-
-/* ── 固定ヘッダー ─────────────────── */
-#topbar{
-  position:fixed;inset:0 0 auto 0;height:var(--header-h);
-  background:var(--sidebar);border-bottom:1px solid var(--border);
-  display:flex;align-items:center;justify-content:center;
-  z-index:1000;
-}
-#title{flex:1;text-align:center;font-size:18px;font-weight:600;}
-
 *{box-sizing:border-box;margin:0;padding:0}
 body{
   display:flex;height:100vh;font-family:"Segoe UI",sans-serif;
@@ -41,7 +30,6 @@ body{
   width:240px;min-width:60px;background:var(--sidebar);
   border-right:1px solid var(--border);
   display:flex;flex-direction:column;transition:width .25s;
-  margin-top:var(--header-h);          /* ヘッダー分下げる */
 }
 #sidebar.collapsed{width:60px}
 #sidebar.collapsed #logo{display:none}
@@ -51,8 +39,8 @@ nav{flex:1;overflow-y:auto}
 
 /* ハンバーガーは常に画面固定（Safe-Area 考慮） */
 #toggle{
+  position:fixed;left:16px;top:16px;z-index:1001;
   background:none;border:none;font-size:20px;color:var(--icon);cursor:pointer;
-  margin-left:16px;
 }
 #toggle:hover{color:var(--hover)}
 
@@ -114,7 +102,7 @@ audio.recording {
   flex:1;
   display:flex;
   flex-direction:column;
-  padding:calc(18px + var(--header-h)) 18px 18px 18px;  /* ヘッダー高さ分の余白を確保 */
+  padding:18px;
   overflow-y:auto;              /* ← ここを auto にして縦スクロールを許可 */
   overflow-x:hidden;            /* 横方向は従来どおり隠す */
   -webkit-overflow-scrolling:touch; /* iOS で慣性スクロール */
@@ -157,7 +145,7 @@ audio{width:100%;margin-top:10px;border-radius:4px}
 @media (max-width:768px){
   /* サイドバー本体を画面外に寄せておき、.open で表示 */
   #sidebar{
-    position:fixed;          inset:var(--header-h) auto 0 0;
+    position:fixed;          inset:0 auto 0 0;
     width:80vw;              max-width:300px;
     transform:translateX(-100%);
     transition:transform .3s;
@@ -202,11 +190,6 @@ audio{width:100%;margin-top:10px;border-radius:4px}
 </head>
 
 <body>
-<!-- 固定ヘッダー -->
-<div id="topbar">
-  <span id="title">Transcriber</span>
-</div>
-
 <!-- トグルボタン -->
 <button id="toggle">
   <i class="fas fa-bars"></i>
@@ -222,6 +205,7 @@ audio{width:100%;margin-top:10px;border-radius:4px}
     <div class="menu-item" data-act="record"><i class="fa-solid fa-microphone"></i><span>文字起こし</span></div>
     <div class="menu-item" data-act="summarize"><i class="fa-solid fa-align-left"></i><span>要約</span></div>
     <div class="menu-item" data-act="download"><i class="fa-solid fa-copy"></i><span>コピー</span></div>
+    <div class="menu-item" data-act="audio"><i class="fa-solid fa-download"></i><span>音声DL</span></div>
     <div class="menu-item" data-act="settings"><i class="fa-solid fa-gear"></i><span>設定</span></div>
 
     <!-- ─ history moved here ─ -->
@@ -265,6 +249,8 @@ let apiKey = localStorage.getItem('oa-key') || '';
 /* ---------- 状態 ---------- */
 let vadE, rec=false, timer, tick, remainMs=7200000;
 let segs=[], queue=[], busy=false;
+// MediaRecorder 用
+let mediaRec=null, mrChunks=[], fullBlob=null;
 
 /* ===  IndexedDB  ======================================= */
 let db; const maxHist = 10;
@@ -440,6 +426,12 @@ async function startRec(){
   }
   queue=[];busy=false;$('#player').src='';$('#player').load();
   await vadE.start();rec=true;segs=[];$('#result').innerHTML='';$('#summary').textContent='';
+  /* --- MediaRecorder でフルセッション録音開始 --- */
+  const stream = vadE.stream ?? (await navigator.mediaDevices.getUserMedia({audio:true}));
+  mediaRec = new MediaRecorder(stream,{mimeType:'audio/webm;codecs=opus'});
+  mrChunks = [];
+  mediaRec.ondataavailable = e=> mrChunks.push(e.data);
+  mediaRec.start();
   remainMs=7200000;timer=setTimeout(stopRec,remainMs);
   tick=setInterval(()=>{remainMs-=1000;$('#counter').textContent=` 残り ${Math.floor(remainMs/60000)}:${pad((remainMs/1000)%60)}`;},1000);
   updateRecLabel();
@@ -448,7 +440,11 @@ async function startRec(){
   $('#player').classList.add('recording');
 }
 function stopRec(){
-  if(vadE) vadE.pause();
+  if(vadE){
+    vadE.pause();
+    // ストリームを停止してマイクを解放
+    vadE.stream?.getTracks().forEach(t=>t.stop());
+  }
   rec = false;
   clearTimeout(timer);
   clearInterval(tick);
@@ -458,6 +454,16 @@ function stopRec(){
   const itm = document.querySelector('[data-act="record"]');
   itm.classList.remove('active');        // 通常色に戻す
   itm.classList.remove('rec-on');        // 点滅も停止
+  
+  // フル録音を確定して Blob 化
+  if(mediaRec){
+    mediaRec.onstop = ()=>{
+      fullBlob = new Blob(mrChunks,{type:'audio/webm'});
+      mrChunks = [];
+      mediaRec = null;
+    };
+    mediaRec.stop();
+  }
   
   // オーディオプレーヤーの点滅を停止
   $('#player').classList.remove('recording');
@@ -477,7 +483,10 @@ function appendSeg(text,audio,loading=false){
   const idx=segs.push({ts,text,audio})-1;
   const div=document.createElement('div');div.className='msg';div.dataset.idx=idx;
   div.innerHTML=`<span class='ts'>${ts}</span><div class='txt'>${text}</div>`;
-  div.onclick=()=>{$('#player').src=audio;$('#player').play();};
+  div.onclick=()=>{
+    const pl=$('#player'); pl.dataset.idx=idx;
+    pl.src=audio; pl.play();
+  };
   $('#result').append(div);if(!loading)$('#result').scrollTop=$('#result').scrollHeight;
   return idx;
 }
@@ -485,8 +494,20 @@ function replaceSeg(i,text){if(i<0||i>=segs.length)return;segs[i].text=text;
   const n=$(`#result .msg[data-idx="${i}"] .txt`);if(n)n.textContent=text;}
 function attachClicks(){document.querySelectorAll('.msg').forEach(el=>{
   const i=+el.dataset.idx, a=segs[i].audio||'';if(!a.startsWith('data:'))return;
-  el.onclick=()=>{$('#player').src=a;$('#player').play();};
+  el.onclick=()=>{
+    const pl=$('#player'); pl.dataset.idx=el.dataset.idx;
+    pl.src=a; pl.play();
+  };
 });}
+
+// 連続再生：ended で次チャンクへ
+$('#player').addEventListener('ended',()=>{
+  const cur=+($('#player').dataset.idx||-1), next=cur+1;
+  if(next<segs.length&&segs[next].audio){
+    const pl=$('#player'); pl.dataset.idx=next;
+    pl.src=segs[next].audio; pl.play();
+  }
+});
 
 /* ===  GPT 要約 & DL =================================== */
 async function summarize(){
@@ -519,6 +540,13 @@ function downloadTxt(){
     .then(()=>alert('文字起こし結果をコピーしました'))
     .catch(()=>alert('コピーに失敗しました'));
 }
+function downloadAudio(){
+  if(!fullBlob){alert('録音がありません');return;}
+  const url=URL.createObjectURL(fullBlob);
+  const a=document.createElement('a'); a.href=url;
+  a.download=`record_${new Date().toISOString().slice(0,16).replace(/[:T]/g,'-')}.webm`;
+  a.click(); URL.revokeObjectURL(url);
+}
 function openModal(){$('#apiKey').value=apiKey;$('#modal').classList.add('open');}
 
 /* ===  dispatcher ======================================= */
@@ -529,6 +557,7 @@ function dispatch(act){
     case'record':rec?stopRec():startRec();break;
     case'summarize':summarize();break;
     case'download':downloadTxt();break;
+    case'audio':downloadAudio();break;
     case'settings':openModal();break;
   }
 }
