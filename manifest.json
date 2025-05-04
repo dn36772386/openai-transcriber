@@ -1,0 +1,13 @@
+{
+  "name": "OpenAI Transcriber",
+  "short_name": "Transcriber",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#f7f7f8",
+  "theme_color": "#10a37f",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-180.png", "sizes": "180x180", "type": "image/png", "purpose": "apple" }
+  ]
+}
