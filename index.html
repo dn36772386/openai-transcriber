@@ -27,7 +27,7 @@ body{
 
 /* ───────── 固定ヘッダー ───────── */
 #global-header{position:sticky; top:0; z-index:1000; display:flex; align-items:center; gap:.5rem; height:3rem; padding:0 .75rem; background:#fff; border-bottom:1px solid #e5e7eb;}
-#menu-toggle{font-size:1.25rem;background:none;border:none;cursor:pointer;}
+#toggle{font-size:1.25rem;background:none;border:none;cursor:pointer;}
 #app-title{flex:1;text-align:center;font-size:1rem;margin:0;}
 #header-actions button{margin-left:.5rem;}
 
@@ -210,7 +210,7 @@ audio{width:100%;margin-top:10px;border-radius:4px}
 <body>
 <!-- ── 固定ヘッダー ───────────────────────────── -->
 <header id="global-header">
-  <button id="menu-toggle" aria-label="サイドバー開閉">&#9776;</button>
+  <button id="toggle" aria-label="サイドバー開閉">&#9776;</button>
   <h1 id="app-title">OpenAI Transcriber</h1>
   <div id="header-actions">
     <button id="rec-btn"   aria-label="録音開始 / 停止">●</button>
@@ -227,6 +227,8 @@ audio{width:100%;margin-top:10px;border-radius:4px}
   </nav>
   <section id="sidebar-body"></section>
 </aside>
+<!-- 背景カーテン -->
+<div id="backdrop"></div>
 
 <!-- ── ミニプレイヤー（連続再生用） ─────────────── -->
 <div id="mini-player" hidden>
@@ -240,7 +242,6 @@ audio{width:100%;margin-top:10px;border-radius:4px}
     <div class="section">
       <div id="counter"></div>        <!-- ← 復活させた残り時間表示 -->
       <div id="result" class="box"></div>
-      <audio id="player" controls></audio>
     </div>
   </section>
 </main>
@@ -536,7 +537,7 @@ if(!apiKey) openModal();
 
 /* ───────── ヘッダー & サイドバー ───────── */
 const sidebar    = document.getElementById('sidebar');
-const menuToggle = document.getElementById('menu-toggle');
+const menuToggle = document.getElementById('toggle');
 const tabButtons = document.querySelectorAll('#sidebar-tabs button');
 const tabBody    = document.getElementById('sidebar-body');
 
