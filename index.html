@@ -340,25 +340,34 @@ async function openHist(key){
   tx.onsuccess=()=>{const h=tx.result;if(!h)return;
     $('#result').innerHTML=h.html; segs=h.segs||[]; attachClicks();
     $('#summary').textContent=h.summary||''; markSel(key);
-    if (h.audio instanceof Blob) {
-      currentAudioBlob = h.audio;            // 標準ケース
-    } else if (h.audioBuf) {                 // ArrayBuffer 方式で保存されていた場合
+    /* ArrayBuffer 優先で復元。旧レコードもフォールバック */
+    if (h.audioBuf) {
       currentAudioBlob = new Blob([h.audioBuf], {type: h.mime || 'audio/webm'});
+    } else if (h.audio instanceof Blob) {
+      currentAudioBlob = h.audio;
     } else {
-      currentAudioBlob = null;               // fallback で後段再構築
+      currentAudioBlob = null;
     }
   };
 }
 async function pushHist(){
   if(!segs.length)return;
   const d=new Date(), time=`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  /* --- ArrayBuffer 化して保存 --- */
+  let audioBuf = null, mime = '';
+  if (currentAudioBlob) {
+    audioBuf = await currentAudioBlob.arrayBuffer();
+    mime     = currentAudioBlob.type || 'audio/webm';
+  }
   await putHist({
     time,
     html:$('#result').innerHTML,
     segs:[...segs],
     title:time,
     summary:$('#summary').textContent,
-    audio: currentAudioBlob            // ★追加
+    audioBuf,
+    mime,
+    audio: currentAudioBlob
   });
   drawHist(); markSel(time);
 }
