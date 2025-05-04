@@ -263,7 +263,6 @@ function dbg(...args){ if(DEBUG) console.log('[DBG]', ...args); }
 /* ---------- util ---------- */
 const $ = q => document.querySelector(q),
       pad = n => String(n).padStart(2,'0');
-const DEBUG = false;
 let apiKey = localStorage.getItem('oa-key') || '';
 
 /* ---------- 状態 ---------- */
