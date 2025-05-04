@@ -18,7 +18,18 @@
 :root{
   --bg:#f7f7f8;--sidebar:#fff;--accent:#10a37f;--icon:#334155;--hover:#111827;
   --border:#e5e7eb;--danger:#dc2626;--card:#fff;
+  --header-h:48px;                      /* ヘッダー高さ */
 }
+
+/* ── 固定ヘッダー ─────────────────── */
+#topbar{
+  position:fixed;inset:0 0 auto 0;height:var(--header-h);
+  background:var(--sidebar);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:center;
+  z-index:1000;
+}
+#title{flex:1;text-align:center;font-size:18px;font-weight:600;}
+
 *{box-sizing:border-box;margin:0;padding:0}
 body{
   display:flex;height:100vh;font-family:"Segoe UI",sans-serif;
@@ -30,6 +41,7 @@ body{
   width:240px;min-width:60px;background:var(--sidebar);
   border-right:1px solid var(--border);
   display:flex;flex-direction:column;transition:width .25s;
+  margin-top:var(--header-h);          /* ヘッダー分下げる */
 }
 #sidebar.collapsed{width:60px}
 #sidebar.collapsed #logo{display:none}
@@ -39,8 +51,8 @@ nav{flex:1;overflow-y:auto}
 
 /* ハンバーガーは常に画面固定（Safe-Area 考慮） */
 #toggle{
-  position:fixed;left:16px;top:16px;z-index:1001;
   background:none;border:none;font-size:20px;color:var(--icon);cursor:pointer;
+  margin-left:16px;
 }
 #toggle:hover{color:var(--hover)}
 
@@ -102,7 +114,7 @@ audio.recording {
   flex:1;
   display:flex;
   flex-direction:column;
-  padding:18px;
+  padding:calc(18px + var(--header-h)) 18px 18px 18px;  /* ヘッダー高さ分の余白を確保 */
   overflow-y:auto;              /* ← ここを auto にして縦スクロールを許可 */
   overflow-x:hidden;            /* 横方向は従来どおり隠す */
   -webkit-overflow-scrolling:touch; /* iOS で慣性スクロール */
@@ -145,7 +157,7 @@ audio{width:100%;margin-top:10px;border-radius:4px}
 @media (max-width:768px){
   /* サイドバー本体を画面外に寄せておき、.open で表示 */
   #sidebar{
-    position:fixed;          inset:0 auto 0 0;
+    position:fixed;          inset:var(--header-h) auto 0 0;
     width:80vw;              max-width:300px;
     transform:translateX(-100%);
     transition:transform .3s;
@@ -190,6 +202,11 @@ audio{width:100%;margin-top:10px;border-radius:4px}
 </head>
 
 <body>
+<!-- 固定ヘッダー -->
+<div id="topbar">
+  <span id="title">Transcriber</span>
+</div>
+
 <!-- トグルボタン -->
 <button id="toggle">
   <i class="fas fa-bars"></i>
