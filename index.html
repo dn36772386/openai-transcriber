@@ -25,6 +25,24 @@ body{
   background:var(--bg);color:#222;overflow:hidden;
 }
 
+/* ───────── 固定ヘッダー ───────── */
+#global-header{position:sticky; top:0; z-index:1000; display:flex; align-items:center; gap:.5rem; height:3rem; padding:0 .75rem; background:#fff; border-bottom:1px solid #e5e7eb;}
+#menu-toggle{font-size:1.25rem;background:none;border:none;cursor:pointer;}
+#app-title{flex:1;text-align:center;font-size:1rem;margin:0;}
+#header-actions button{margin-left:.5rem;}
+
+/* ───────── サイドバー ───────── */
+#sidebar{position:fixed; left:0; top:0; bottom:0; width:16rem; background:#fafafa; border-right:1px solid #e5e7eb; transform:translateX(-100%); transition:transform .2s ease; overflow:hidden; z-index:999;}
+#sidebar.open{transform:none;}
+#sidebar-tabs{display:flex;}
+#sidebar-tabs button{flex:1;padding:.5rem;border:none;background:none;cursor:pointer;}
+#sidebar-tabs .active{border-bottom:2px solid #10a37f;}
+#sidebar-body{padding:1rem;overflow-y:auto;height:calc(100% - 2.5rem);}
+
+/* ───────── ミニプレイヤー ───────── */
+#mini-player{position:sticky; top:3rem; background:#fff; z-index:999; padding:.25rem .75rem; border-bottom:1px solid #e5e7eb;}
+#mini-player audio{width:100%;}
+
 /* ── sidebar (desktop 基準) ───────────────────────── */
 #sidebar{
   width:240px;min-width:60px;background:var(--sidebar);
@@ -190,54 +208,42 @@ audio{width:100%;margin-top:10px;border-radius:4px}
 </head>
 
 <body>
-<!-- トグルボタン -->
-<button id="toggle">
-  <i class="fas fa-bars"></i>
-</button>
+<!-- ── 固定ヘッダー ───────────────────────────── -->
+<header id="global-header">
+  <button id="menu-toggle" aria-label="サイドバー開閉">&#9776;</button>
+  <h1 id="app-title">OpenAI Transcriber</h1>
+  <div id="header-actions">
+    <button id="rec-btn"   aria-label="録音開始 / 停止">●</button>
+    <button id="hist-btn"  aria-label="履歴">履歴</button>
+    <button id="set-btn"   aria-label="設定">設定</button>
+  </div>
+</header>
 
-<!-- ── sidebar ───────────────────────── -->
-<aside id="sidebar">
-  <header>
-    <span id="logo">Transcriber</span>
-  </header>
-
-  <nav id="menu">
-    <div class="menu-item" data-act="record"><i class="fa-solid fa-microphone"></i><span>文字起こし</span></div>
-    <div class="menu-item" data-act="summarize"><i class="fa-solid fa-align-left"></i><span>要約</span></div>
-    <div class="menu-item" data-act="download"><i class="fa-solid fa-copy"></i><span>コピー</span></div>
-    <div class="menu-item" data-act="settings"><i class="fa-solid fa-gear"></i><span>設定</span></div>
-
-    <!-- ─ history moved here ─ -->
-    <div id="history">
-      <div id="histHeader">履歴
-        <button id="clearAll"><i class="fa-solid fa-trash"></i></button>
-      </div>
-      <ul id="histList"></ul>
-    </div>
+<!-- ── 開閉式サイドバー ───────────────────────── -->
+<aside id="sidebar" class="closed">
+  <nav id="sidebar-tabs">
+    <button data-tab="history"  class="active">履歴</button>
+    <button data-tab="settings">設定</button>
   </nav>
+  <section id="sidebar-body"></section>
 </aside>
 
-<!-- 背景カーテン -->
-<div id="backdrop"></div>
-
-<!-- ── main ──────────────────────────── -->
-<section id="main">
-  <div class="section"><div id="summary" class="box"></div></div>
-  <div class="section">
-    <div id="counter"></div>        <!-- ← 復活させた残り時間表示 -->
-    <div id="result" class="box"></div>
-    <audio id="player" controls></audio>
-  </div>
-</section>
-
-<!-- ── modal ─────────────────────────── -->
-<div id="modal" class="modal">
-  <div class="modal-box">
-    <h3>OpenAI APIキー</h3>
-    <input id="apiKey" type="password" placeholder="sk-…" />
-    <button id="saveKey">保存</button>
-  </div>
+<!-- ── ミニプレイヤー（連続再生用） ─────────────── -->
+<div id="mini-player" hidden>
+  <audio id="player" controls></audio>
 </div>
+
+<!-- 既存の主要コンテンツを main タグでラップ -->
+<main id="app-root">
+  <section id="main">
+    <div class="section"><div id="summary" class="box"></div></div>
+    <div class="section">
+      <div id="counter"></div>        <!-- ← 復活させた残り時間表示 -->
+      <div id="result" class="box"></div>
+      <audio id="player" controls></audio>
+    </div>
+  </section>
+</main>
 
 <script>
 /* ---------- util ---------- */
@@ -527,6 +533,81 @@ if(!mq.matches){ document.getElementById('sidebar').classList.add('collapsed'); 
 /* ===  init ============================================= */
 openDB().then(drawHist);
 if(!apiKey) openModal();
+
+/* ───────── ヘッダー & サイドバー ───────── */
+const sidebar    = document.getElementById('sidebar');
+const menuToggle = document.getElementById('menu-toggle');
+const tabButtons = document.querySelectorAll('#sidebar-tabs button');
+const tabBody    = document.getElementById('sidebar-body');
+
+menuToggle.addEventListener('click', () => {
+  sidebar.classList.toggle('open');
+  localStorage.setItem('sb-open', sidebar.classList.contains('open'));
+});
+if(localStorage.getItem('sb-open')==='true') sidebar.classList.add('open');
+tabButtons.forEach(btn => btn.addEventListener('click', e => {
+  tabButtons.forEach(b=>b.classList.remove('active'));
+  e.currentTarget.classList.add('active');
+  renderSidebar(e.currentTarget.dataset.tab);
+}));
+function renderSidebar(tab){
+  tabBody.innerHTML='';
+  if(tab==='history') drawHistory();
+  if(tab==='settings') drawSettings();
+}
+
+/* ───────── 録音 & 履歴管理 ───────── */
+let chunks = [];
+let recordings = [];
+mediaRecorder.ondataavailable = e => chunks.push(e.data);
+document.getElementById('rec-btn').addEventListener('click', () => {
+  if(mediaRecorder.state==='inactive'){
+    chunks=[]; mediaRecorder.start();
+  } else {
+    mediaRecorder.stop();
+    mediaRecorder.onstop = async()=>{
+      const blob=new Blob(chunks,{type:'audio/webm'});
+      recordings.push({blob,text:currentTranscript});
+      saveToIDB(blob,currentTranscript);
+      renderSidebar('history');
+    };
+  }
+});
+
+/* ───────── 一括ダウンロード ───────── */
+function downloadMerged(){
+  const merged=new Blob(recordings.map(r=>r.blob),{type:'audio/webm'});
+  const url=URL.createObjectURL(merged);
+  const a=document.createElement('a'); a.href=url;
+  a.download=`${new Date().toISOString().slice(0,16).replace(/[:T]/g,'-')}.webm`;
+  a.click(); URL.revokeObjectURL(url);
+}
+
+/* ───────── 連続再生 ───────── */
+const player = document.getElementById('player');
+player.addEventListener('ended', () => {
+  const next = recordings.findIndex(r=>r.blob===player.currentBlob)+1;
+  if(next<recordings.length) playBlob(recordings[next].blob);
+  else document.getElementById('mini-player').hidden=true;
+});
+function playBlob(blob){
+  document.getElementById('mini-player').hidden=false;
+  player.currentBlob=blob; player.src=URL.createObjectURL(blob); player.play();
+}
+
+/* ───────── 履歴描画 & 設定フォーム ───────── */
+function drawHistory(){
+  const ul=document.createElement('ul');
+  recordings.forEach((r,i)=>{
+    const li=document.createElement('li'); li.textContent=`録音 ${i+1}`;
+    li.onclick=()=>playBlob(r.blob); ul.appendChild(li);
+  });
+  const btn=document.createElement('button'); btn.textContent='音声一括DL';
+  btn.onclick=downloadMerged; tabBody.append(ul,btn);
+}
+function drawSettings(){
+  /* APIキー＆audioBitsPerSecond入力フォームをここに描画 */
+}
 </script>
 </body>
 </html>
