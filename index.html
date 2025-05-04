@@ -81,7 +81,13 @@ audio.recording {
 .menu-item:hover i,.menu-item:hover span{color:var(--hover)}
 .menu-item.active{border-left-color:var(--accent)}
 .menu-item.active i,.menu-item.active span{color:var(--accent)}
-#sidebar.collapsed .menu-item{justify-content:center}
+#sidebar.collapsed .menu-item{
+  justify-content:center;
+  padding:14px 0;          /* 上下均等にして垂直センタリング */
+}
+#sidebar.collapsed .menu-item i{
+  margin:0;                /* 左マージン除去で中央寄せ */
+}
 #sidebar.collapsed .menu-item span{display:none}
 
 /* ── history block (サイドバー内) ── */
@@ -247,6 +253,13 @@ audio{width:100%;margin-top:10px;border-radius:4px}
 </div>
 
 <script>
+// グローバルエラーキャッチャー
+window.addEventListener('error', e => dbg('Global Error:', e.message, 'at', e.filename+':'+e.lineno));
+
+/* === debug helper ===================================== */
+const DEBUG = true;
+function dbg(...args){ if(DEBUG) console.log('[DBG]', ...args); }
+
 /* ---------- util ---------- */
 const $ = q => document.querySelector(q),
       pad = n => String(n).padStart(2,'0');
@@ -255,6 +268,7 @@ let apiKey = localStorage.getItem('oa-key') || '';
 /* ---------- 状態 ---------- */
 let vadE, rec=false, timer, tick, remainMs=7200000;
 let segs=[], queue=[], busy=false;
+let currentAudioBlob=null;          // 選択中（または直近録音）の統合音声
 // MediaRecorder 用
 let mediaRec=null, mrChunks=[], fullBlob=null;
 
@@ -305,6 +319,7 @@ async function clearAllHist(){
 
 /* ===  履歴 UI  ========================================= */
 async function drawHist(){
+  dbg('drawHist start');
   const ul=$('#histList'); ul.innerHTML='';
   (await getAllHist()).forEach(h=>{
     const li=document.createElement('li');li.className='hist';li.dataset.key=h.time;
@@ -313,6 +328,7 @@ async function drawHist(){
     li.querySelector('.btnDel').onclick=e=>{e.stopPropagation();deleteHistItem(h.time).then(drawHist);};
     ul.append(li);
   });
+  dbg('drawHist completed');
 }
 function markSel(key){
   document.querySelectorAll('.hist').forEach(l=>l.classList.remove('selected'));
@@ -324,12 +340,26 @@ async function openHist(key){
   tx.onsuccess=()=>{const h=tx.result;if(!h)return;
     $('#result').innerHTML=h.html; segs=h.segs||[]; attachClicks();
     $('#summary').textContent=h.summary||''; markSel(key);
+    if (h.audio instanceof Blob) {
+      currentAudioBlob = h.audio;            // 標準ケース
+    } else if (h.audioBuf) {                 // ArrayBuffer 方式で保存されていた場合
+      currentAudioBlob = new Blob([h.audioBuf], {type: h.mime || 'audio/webm'});
+    } else {
+      currentAudioBlob = null;               // fallback で後段再構築
+    }
   };
 }
 async function pushHist(){
   if(!segs.length)return;
   const d=new Date(), time=`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  await putHist({time,html:$('#result').innerHTML,segs:[...segs],title:time,summary:$('#summary').textContent});
+  await putHist({
+    time,
+    html:$('#result').innerHTML,
+    segs:[...segs],
+    title:time,
+    summary:$('#summary').textContent,
+    audio: currentAudioBlob            // ★追加
+  });
   drawHist(); markSel(time);
 }
 
@@ -407,6 +437,7 @@ async function processQueue(){
 
 /* ===  録音制御  ======================================== */
 function updateRecLabel() {
+  dbg('updateRecLabel, rec=', rec);
   const item = document.querySelector('[data-act="record"]');
   if(!item) return;                     // 念のため null ガード
 
@@ -455,7 +486,6 @@ function stopRec(){
   clearTimeout(timer);
   clearInterval(tick);
   $('#counter').textContent = '';
-  pushHist();                 // 履歴保存
   updateRecLabel();           // ラベル「文字起こし」へ戻す
   const itm = document.querySelector('[data-act="record"]');
   itm.classList.remove('active');        // 通常色に戻す
@@ -465,8 +495,12 @@ function stopRec(){
   if(mediaRec){
     mediaRec.onstop = ()=>{
       fullBlob = new Blob(mrChunks,{type:'audio/webm'});
+      currentAudioBlob = fullBlob;      // 直近セッションの音声
       mrChunks = [];
       mediaRec = null;
+
+      /* Blob が確定してから履歴に保存 */
+      pushHist();
     };
     mediaRec.stop();
   }
@@ -485,6 +519,7 @@ async function handleChunk(arr){
 
 /* ===  表示ユーティリティ  ============================= */
 function appendSeg(text,audio,loading=false){
+  dbg('appendSeg idx=', segs.length, 'text=', text);
   const now=new Date(), ts=`${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
   const idx=segs.push({ts,text,audio})-1;
   const div=document.createElement('div');div.className='msg';div.dataset.idx=idx;
@@ -499,8 +534,10 @@ function appendSeg(text,audio,loading=false){
 function replaceSeg(i,text){if(i<0||i>=segs.length)return;segs[i].text=text;
   const n=$(`#result .msg[data-idx="${i}"] .txt`);if(n)n.textContent=text;}
 function attachClicks(){document.querySelectorAll('.msg').forEach(el=>{
+  dbg('attachClicks on msg idx=', el.dataset.idx);
   const i=+el.dataset.idx, a=segs[i].audio||'';if(!a.startsWith('data:'))return;
   el.onclick=()=>{
+    dbg('msg clicked idx=', i);
     const pl=$('#player'); pl.dataset.idx=el.dataset.idx;
     pl.src=a; pl.play();
   };
@@ -511,7 +548,7 @@ $('#player').addEventListener('ended',()=>{
   const cur=+($('#player').dataset.idx||-1), next=cur+1;
   if(next<segs.length&&segs[next].audio){
     const pl=$('#player'); pl.dataset.idx=next;
-    pl.src=a; pl.play();
+    pl.src=segs[next].audio; pl.play();
   }
 });
 
@@ -547,16 +584,36 @@ function downloadTxt(){
     .catch(()=>alert('コピーに失敗しました'));
 }
 function downloadAudio(){
-  if(!fullBlob){alert('録音がありません');return;}
-  const url=URL.createObjectURL(fullBlob);
+  if(!currentAudioBlob){
+    /* 旧レコード救済：各チャンクの dataURL を結合して 1 本化 */
+    const dataBlobs = segs
+       .map(s => s.audio)
+       .filter(a => a && a.startsWith('data:'))
+       .map(dataURLtoBlob);          // ↓関数は後述
+    if(!dataBlobs.length){ alert('ダウンロード対象の録音がありません'); return; }
+    currentAudioBlob = new Blob(dataBlobs, {type:'audio/webm'});
+  }
+  const url=URL.createObjectURL(currentAudioBlob);
   const a=document.createElement('a'); a.href=url;
   a.download=`record_${new Date().toISOString().slice(0,16).replace(/[:T]/g,'-')}.webm`;
   a.click(); URL.revokeObjectURL(url);
 }
+
+// Utility: dataURL → Blob 변환
+function dataURLtoBlob(url){
+  const [meta, data] = url.split(',');
+  const mime = meta.match(/:(.*?);/)[1];
+  const bin  = atob(data);
+  const arr  = new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) arr[i] = bin.charCodeAt(i);
+  return new Blob([arr], {type:mime});
+}
+
 function openModal(){$('#apiKey').value=apiKey;$('#modal').classList.add('open');}
 
 /* ===  dispatcher ======================================= */
 function dispatch(act){
+  dbg('dispatch action=', act);
   document.querySelectorAll('.menu-item').forEach(m=>m.classList.remove('active'));
   document.querySelector(`[data-act="${act}"]`).classList.add('active');
   switch(act){
@@ -577,7 +634,11 @@ applyNarrow(mq);                            // 読み込み時
 if(!mq.matches){ document.getElementById('sidebar').classList.add('collapsed'); }
 
 /* ===  init ============================================= */
-openDB().then(drawHist);
+openDB().then(async ()=>{
+  await drawHist();
+  const first=document.querySelector('#histList .hist');
+  if(first) first.click();           // 最新レコードを開いて currentAudioBlob セット
+});
 if(!apiKey) openModal();
 /* ---------- PWA (Service Worker) --------- */
 if('serviceWorker' in navigator){
