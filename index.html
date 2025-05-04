@@ -250,6 +250,7 @@ audio{width:100%;margin-top:10px;border-radius:4px}
 /* ---------- util ---------- */
 const $ = q => document.querySelector(q),
       pad = n => String(n).padStart(2,'0');
+const DEBUG = false;
 let apiKey = localStorage.getItem('oa-key') || '';
 
 /* ---------- 状態 ---------- */
