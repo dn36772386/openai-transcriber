@@ -5,6 +5,12 @@
 <title>OpenAI Transcriber v3.7 (IDB + Responsive)</title>
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 
+<!-- PWA -->
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+
 <!-- ──────────  libs  ────────── -->
 <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.1/dist/ort.min.js"></script>
 <script>ort.env.wasm.numThreads = 1; ort.env.logLevel = 'error';</script>
@@ -505,7 +511,7 @@ $('#player').addEventListener('ended',()=>{
   const cur=+($('#player').dataset.idx||-1), next=cur+1;
   if(next<segs.length&&segs[next].audio){
     const pl=$('#player'); pl.dataset.idx=next;
-    pl.src=segs[next].audio; pl.play();
+    pl.src=a; pl.play();
   }
 });
 
@@ -573,6 +579,12 @@ if(!mq.matches){ document.getElementById('sidebar').classList.add('collapsed'); 
 /* ===  init ============================================= */
 openDB().then(drawHist);
 if(!apiKey) openModal();
+/* ---------- PWA (Service Worker) --------- */
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>{
+    navigator.serviceWorker.register('./sw.js').catch(console.error);
+  });
+}
 </script>
 </body>
 </html>
