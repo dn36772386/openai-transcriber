@@ -25,6 +25,10 @@ let mediaRec = null;
 let mrChunks = [];
 let db;
 
+// --- 追加: 多重実行／多重保存を防ぐフラグ ---
+let stopping = false;      // stopRec の二重呼び出し防止
+let savedOnce = false;     // onstop の二重発火防止
+
 /* ======================================================
    IndexedDB（履歴）
    ====================================================== */
@@ -88,18 +92,25 @@ async function startRec() {
   updateRecUI();
 }
 function stopRec() {
+  if (stopping) return;   // 多重呼び出しガード
+  stopping = true;
+  savedOnce = false;
+
   vadE?.pause();
   vadE?.stream?.getTracks().forEach(t => t.stop());
   clearTimeout(timer); clearInterval(tick);
   rec = false; $('#counter').textContent = ''; updateRecUI();
 
   mediaRec.onstop = async () => {
+    if (savedOnce) return; // onstop 二重発火ガード
+    savedOnce = true;
     currentBlob = new Blob(mrChunks, { type: 'audio/webm' });
     await saveHist();
+    stopping = false;     // 完了後フラグ解除
   };
   mediaRec.stop();
 
-  // VADのリセット: 次回録音時に新しいインスタンスを生成する
+  // VAD のリセット: 次回録音時に新しいインスタンスを生成
   vadE = null;
 }
 
