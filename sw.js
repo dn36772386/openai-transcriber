@@ -1,4 +1,4 @@
-const CACHE_NAME = 'transcriber-v1';
+const CACHE_NAME = 'transcriber-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -10,12 +10,14 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', e => {
+  self.skipWaiting();  // 即時インストール
   e.waitUntil(
     caches.open(CACHE_NAME).then(c => c.addAll(ASSETS))
   );
 });
 
 self.addEventListener('activate', e => {
+  clients.claim();     // 即時アクティベート＆制御権取得
   e.waitUntil(
     caches.keys().then(keys =>
       Promise.all(

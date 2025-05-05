@@ -1,0 +1,92 @@
+/* ── CSS変数（テーマ） ───────────────────────── */
+:root{
+  --bg:#f7f7f8; --sidebar:#fff; --accent:#10a37f; --icon:#334155;
+  --hover:#111827; --border:#e5e7eb; --danger:#dc2626; --card:#fff;
+}
+
+/* リセット相当 */
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  display:flex;height:100vh;font-family:"Segoe UI",sans-serif;
+  background:var(--bg);color:#222;overflow:hidden;
+}
+
+/* ── サイドバー ───────────────────────── */
+#sidebar{
+  width:240px;min-width:60px;background:var(--sidebar);
+  border-right:1px solid var(--border);
+  display:flex;flex-direction:column;transition:width .25s;
+}
+#sidebar.collapsed{width:60px}
+#sidebar header{display:flex;align-items:center;justify-content:center;padding:12px 14px;height:43.64px}
+#logo{display:block;white-space:nowrap;margin:0 auto;font-weight:600;font-size:18px}
+nav{flex:1;overflow-y:auto}
+
+/* ハンバーガー */
+#toggle{
+  position:fixed;left:16px;top:16px;z-index:1001;
+  background:none;border:none;font-size:20px;color:var(--icon);cursor:pointer;
+}
+#toggle:hover{color:var(--hover)}
+#toggle.rec-on i{color:var(--danger);animation:pulse 1s infinite;}
+
+/* 汎用点滅 */
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+
+/* メニュー項目 */
+.menu-item{
+  display:flex;align-items:center;padding:10px 14px;cursor:pointer;
+  border-left:4px solid transparent;transition:.2s;
+}
+.menu-item i{width:24px;color:var(--icon)}
+.menu-item span{margin-left:10px;color:var(--icon)}
+.menu-item:hover{background:var(--bg)}
+.menu-item:hover i,.menu-item:hover span{color:var(--hover)}
+.menu-item.active{border-left-color:var(--accent)}
+.menu-item.active i,.menu-item.active span{color:var(--accent)}
+#sidebar.collapsed .menu-item{justify-content:center;padding:14px 0}
+#sidebar.collapsed .menu-item span{display:none}
+
+/* 履歴 */
+#history{display:flex;flex-direction:column;overflow:hidden;margin-top:8px}
+#histHeader{padding:6px 14px;font-size:14px;color:#6b7280;border-top:1px solid var(--border);
+            display:flex;justify-content:space-between;align-items:center}
+#histList{list-style:none;overflow-y:auto}
+.hist{display:flex;align-items:center;padding:6px 14px;cursor:pointer;transition:.2s}
+.hist:hover{background:var(--bg)}
+.hist.selected{background:rgba(16,163,127,.12)}
+.hist span{flex:1;white-space:nowrap;text-overflow:ellipsis;overflow:hidden;color:var(--icon)}
+.btnDel{background:none;border:none;color:var(--icon);cursor:pointer;font-size:14px;visibility:hidden}
+.hist:hover .btnDel{visibility:visible}
+.btnDel:hover i,#clearAll:hover i{color:var(--danger)}
+
+/* メイン領域 */
+#main{flex:1;display:flex;flex-direction:column;padding:18px;overflow-y:auto;overflow-x:hidden;}
+.section{margin-bottom:14px}
+.box{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:8px;overflow-y:auto}
+.msg{display:flex;gap:8px;padding:4px;border-radius:4px;cursor:pointer}
+.msg:hover{background:var(--bg)}
+.ts{width:60px;font-size:12px;color:#6b7280}
+.txt{background:#fff;border-radius:4px;padding:4px 6px;flex:1;white-space:pre-wrap}
+
+/* モーダル */
+.modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.3)}
+.modal.open{display:flex}
+.modal-box{background:#fff;padding:16px;border-radius:6px;width:260px;
+          box-shadow:0 4px 12px rgba(0,0,0,.25)}
+.modal-box input{width:100%;padding:6px;border:1px solid var(--border);border-radius:4px;margin-top:6px}
+.modal-box button{margin-top:10px;width:100%;padding:8px;border:none;border-radius:4px;
+                 background:var(--accent);color:#fff;cursor:pointer}
+
+/* レスポンシブ（≤768px）*/
+@media (max-width:768px){
+  #sidebar{position:fixed;inset:0 auto 0 0;width:80vw;max-width:300px;
+           transform:translateX(-100%);transition:transform .3s;z-index:1100;background:var(--sidebar);
+           box-shadow:4px 0 12px rgba(0,0,0,.15);}
+  #sidebar.open{transform:none}
+  #sidebar.collapsed{width:80vw}
+  #toggle{left:12px;top:12px;z-index:1200;background:#fff;border-radius:50%;
+          box-shadow:0 0 4px rgba(0,0,0,.25);}
+  #backdrop{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;z-index:1050;}
+  #backdrop.show{display:block;}
+}
