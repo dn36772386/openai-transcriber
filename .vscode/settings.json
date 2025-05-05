@@ -1,3 +1,15 @@
 {
-    "liveServer.settings.port": 5501
+    "liveServer.settings.port": 5501,
+
+    // コメントアウトされた mcp 設定
+    /*
+    "mcp": {
+        "servers": {
+            "my-mcp-server-ed40349a": {
+                "type": "sse",
+                "url": "https://github-mcp.azurewebsites.net"
+            }
+        }
+    },
+    */
 }
