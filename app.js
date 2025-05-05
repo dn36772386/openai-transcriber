@@ -286,10 +286,21 @@ async function deleteHist(time) {
 
 // 履歴読み込み
 function loadHist(h) {
+  // 表示領域を完全にクリアしてから選択履歴をそのまま描画
   $('#result').innerHTML = '';
-  segs = h.segs;
-  h.segs.forEach(s => appendSeg(s.text, s.audio));
-  $$('.hist').forEach(el => el.classList.toggle('selected', +el.dataset.time === h.time));
+  segs = h.segs;                         // 配列は参照だけ差し替え、push しない
+  h.segs.forEach((s, i) => {            // 既存データを DOM に描画
+    const div = document.createElement('div');
+    div.className = 'msg';
+    div.dataset.idx = i;
+    div.innerHTML = `<span class="ts">${s.ts}</span><div class="txt">${s.text}</div>`;
+    div.onclick = () => playAudio(i);
+    $('#result').append(div);
+  });
+  // サイドバーの選択状態を更新
+  $$('.hist').forEach(el =>
+    el.classList.toggle('selected', +el.dataset.time === h.time)
+  );
 }
 
 // コピー
