@@ -1,0 +1,37 @@
+[33mde579a1[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m コメントアウトされたmcp設定を含む修正を反映
+[33m4a86124[m Fix: 録音停止後に再開できない問題を修正 (vadEリセット)
+[33m55d9f4c[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m DL仕様の不具合を修正
+[33m181c087[m fix: 重複定義を削除し DEBUG 再宣言エラーを解消
+[33mc8a5b5a[m Merge branch 'main' of https://github.com/dn36772386/openai-transcriber
+[33m70259fb[m Disable debug logging
+[33m695ac08[m Add debug logging
+[33m2a47a30[m Update latest source
+[33ma550aa6[m docs: PWA対応に関する情報をREADMEに追記
+[33m0ea124e[m chore: pre-refactor の PWA 機能を main に統合
+[33m229d12d[m[33m ([m[1;31morigin/pre-refactor[m[33m, [m[1;32mpre-refactor[m[33m)[m feat(pwa): マニフェストと Service Worker を追加し PWA 対応,pre-refactor ブランチで PWA 機能を実装
+[33m0e74271[m[33m ([m[1;33mtag: [m[1;33mpre-refactor[m[33m)[m feat: マイク解放連続再生音声ダウンロード機能を追加
+[33m07a982f[m 固定ヘッダーを追加し、サイドバーとメインコンテンツのレイアウトを調整
+[33m23f3a2e[m index.html をコミット58d655fの状態に戻す
+[33maa74612[m サイドバー開閉ボタンIDをtoggleに統一し、バックドロップ要素を追加
+[33m99787eb[m インラインでヘッダーサイドバーミニプレイヤーおよび録音/履歴/再生機能を統合
+[33m58d655f[m トグルボタンを録音中インジケータ化: span#recMark削除 & rec-onクラス追加
+[33mb54a009[m OpenAI Transcriber v3.7のHTML追加: IndexedDB履歴とレスポンシブ対応を含む
+[33m95446e7[m updateRecLabelをnullガード付きで再実装とUI調整
+[33m89d773a[m ハンバーガーボタンに赤点マーク再挿入＆録音アイコン点滅追加
+[33md077ec2[m 文字起こしセクションにタイマー再配置と#counter CSS更新
+[33m7d229b1[m 録音停止時にactive解除＆録音インジケータ追加
+[33m0419c56[m メニュー/本文クリックでサイドバーを閉じる機能追加
+[33md99f027[m 要約結果と文字起こし結果のタイトルを削除
+[33m55b32e7[m ナビゲーションのダウンロードをコピーに変更、要約表示処理とクリップボードコピー機能を更新、#mainのスクロール設定を調整
+[33me79a4cb[m モバイル対応: collapsedクラス除去、PC初期折り畳みロジック追加、モバイル時ラベル表示&本文左余白調整
+[33ma3ffea6[m モバイル時のサイドバーアイコン下ラベル表示とmainInnerマージントップ調整
+[33mcc0957b[m v3.7.1: ハンバーガーボタンをサイドバー外に移動しtransform影響を回避
+[33ma2841b0[m v3.7: レスポンシブ対応（モバイル時サイドバーのオーバーレイ表示実装）
+[33mb12e0a5[m Update index.html
+[33mca2c1ab[m Update index.html
+[33mc6996cc[m バグフィックス
+[33m30a8dcc[m バグフィックス
+[33me809658[m Add files via upload
+[33m0c98501[m Update README.md
+[33m1b2f38b[m Add files via upload
+[33m028d646[m Initial commit
