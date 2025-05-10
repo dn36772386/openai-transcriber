@@ -12,6 +12,26 @@ const $$ = q => document.querySelectorAll(q);
 const pad = n => String(n).padStart(2, '0');
 const dbg = (...a) => DEBUG && console.log('[DBG]', ...a);
 
+/* ======================================================
+   スライドプロンプト関数（直前300文字）
+   ====================================================== */
+function buildPrompt(maxLen = 300) {
+  const buf = [];
+  let total = 0;
+  for (let i = segs.length - 1; i >= 0; i--) {
+    const txt = segs[i]?.text || '';
+    if (!txt) continue;
+    if (total + txt.length > maxLen) {
+      buf.unshift(txt.slice(txt.length - (maxLen - total)));
+      break;
+    }
+    buf.unshift(txt);
+    total += txt.length;
+    if (total === maxLen) break;
+  }
+  return buf.join('');
+}
+
 /* ---------- 状態 ---------- */
 let apiKey = localStorage.getItem('oa-key') || '';
 let vadE = null;
@@ -132,6 +152,8 @@ async function processQueue() {
       fd.append('file', job.file);
       fd.append('model', 'whisper-1');
       fd.append('language', 'ja');
+      /* ← ここで直近300文字の文脈を添付 */
+      fd.append('prompt', buildPrompt());
       const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
         method: 'POST', headers: { Authorization: `Bearer ${apiKey}` }, body: fd
       });
@@ -180,26 +202,67 @@ function updateRecUI() {
   item.classList.toggle('rec-on', rec);
 }
 
-async function summarize() {
+async function proofread() {
   if (!apiKey) { openModal(); return; }
-  const txt = $('#result').innerText.trim();
-  if (!txt) { alert('文字起こし結果がありません'); return; }
-  const btn = $('[data-act="summarize"]'); btn.classList.add('active');
+
+  // segs 配列を [ts] text 形式にまとめる
+  const lines = segs.map(s => `[${s.ts}] ${s.text}`).join('\n');
+  if (!lines.trim()) { alert('文字起こし結果がありません'); return; }
+
+  const btn = $('[data-act="proofread"]');
+  btn.classList.add('active');
+
   try {
-    const body = { model: 'gpt-4o-mini', temperature: 0.7,
-      messages: [{ role: 'system', content: 'タイトル + 箇条書きで日本語要約' },{ role: 'user', content: txt }]
+    const body = {
+      model: 'gpt-4o-mini',
+      temperature: 0,
+      messages: [
+        {
+          role: 'system',
+          content:
+            `あなたは日本語の文字起こし校正アシスタントです。
+前後の文脈を考慮し、誤認識された単語を正しい語に置き換えます。
+タイムスタンプ([HH:MM:SS])は変更せず、次の JSON 配列だけを返してください。
+例:
+[
+  {"ts":"00:00:01","text":"修正後の文"},
+  ...
+]`
+        },
+        { role: 'user', content: lines }
+      ]
     };
+
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST', headers: { 'Content-Type':'application/json', Authorization:`Bearer ${apiKey}` },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify(body)
     });
-    const summary = (await res.json()).choices?.[0]?.message?.content || '';
-    const old = $('.msg.summary'); if(old) old.remove();
-    const div = document.createElement('div'); div.className='msg summary';
-    div.innerHTML = `<span class="ts">要約</span><div class="txt">${summary}</div>`;
-    $('#result').prepend(div);
-  } catch(e) { alert('要約失敗'); console.error(e); }
-  finally { btn.classList.remove('active'); }
+
+    const reply = (await res.json()).choices?.[0]?.message?.content || '[]';
+    let arr;
+    try {
+      arr = JSON.parse(reply);          // GPT が純粋な JSON を返した場合
+    } catch {
+      // 万一 ```json … ``` で返ってきた場合でも括弧内を抜き出す
+      const m = reply.match(/\[([\s\S]*)\]/);
+      arr = m ? JSON.parse(`[
+${m[1]}
+]`) : [];
+    }
+
+    // segs と DOM を更新
+    arr.forEach(({ ts, text }) => {
+      const i = segs.findIndex(s => s.ts === ts);
+      if (i !== -1 && text) replaceSeg(i, text.trim());
+    });
+
+  } catch (e) {
+    console.error(e);
+    alert('校正失敗');
+  } finally {
+    btn.classList.remove('active');
+  }
 }
 
 function dispatch(act) {
@@ -207,7 +270,7 @@ function dispatch(act) {
   $(`[data-act="${act}"]`).classList.add('active');
   switch(act) {
     case 'record': rec ? stopRec() : startRec(); break;
-    case 'summarize': summarize(); break;
+    case 'proofread': proofread(); break;
     case 'download': copyText(); break;
     case 'audio': downloadAudio(); break;
     case 'settings': openModal(); break;
