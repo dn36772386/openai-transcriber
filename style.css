@@ -132,5 +132,14 @@ input:checked+.slider:before{transform:translateX(20px)}
 
 /* メッセージ */
 .msg{display:flex;gap:6px;margin-bottom:8px}
-.ts{width:68px;font-size:13px;color:#555;flex-shrink:0;text-align:right}
-.txt{white-space:pre-wrap}
+.ts{
+  width:50px;            /* ← 幅を狭く */
+  font-size:13px;
+  color:#555;
+  flex:0 0 50px;         /* 固定幅で縮まない */
+  text-align:right
+}
+.txt{
+  flex:1;                /* 残り幅をすべて使用 */
+  white-space:pre-wrap
+}
