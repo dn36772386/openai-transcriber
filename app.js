@@ -69,13 +69,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const result = $('#result');
   if (result) {
     // click や touchstart 両方をハンドリング
-    const copyLine = e => {
+    const copyLine = async e => {
       // どちらを押しても .msg 全体に遡る
       const msg = e.target.closest('.msg');
       if (!msg) return;
       // タイムスタンプを除き .txt 要素だけコピー
       const txt = msg.querySelector('.txt')?.innerText || '';
-      navigator.clipboard?.writeText(txt);
+      await copyToClipboard(txt);                // iOS 対応版
       msg.classList.add('copied');             // 背景色を変える
       setTimeout(() => msg.classList.remove('copied'), 800);
     };
@@ -83,6 +83,26 @@ document.addEventListener('DOMContentLoaded', () => {
     result.addEventListener('touchstart', copyLine, { passive: true });
   }
 });
+
+/* ---------- クリップボード共通関数 ---------- */
+async function copyToClipboard(text){
+  try{
+    if(navigator.clipboard?.writeText){
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  }catch(e){/* fallthrough */ }
+  /* フォールバック（iOS Safari 等）*/
+  const ta=document.createElement('textarea');
+  ta.value=text;
+  ta.style.position='fixed';
+  ta.style.opacity='0';
+  document.body.appendChild(ta);
+  ta.focus(); ta.select();
+  try{ document.execCommand('copy'); }catch{}
+  document.body.removeChild(ta);
+  return true;
+}
 
 /* 待機ヘルパ：キューが空になるまで待つ */
 const waitQueue = async () => {
@@ -481,7 +501,7 @@ function loadHist(h) {
 // コピー
 function copyText() {
   const txt = $('#result').innerText;
-  navigator.clipboard.writeText(txt);
+  copyToClipboard(txt);
 }
 
 // 音声DL
