@@ -1,8 +1,0 @@
-# すべてを無視
-*
-
-# 以下のみ追跡
-!.gitignore
-!index.html
-!style.css
-!README.md

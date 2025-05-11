@@ -48,6 +48,59 @@ let db;
 // --- 追加: 多重実行／多重保存を防ぐフラグ ---
 let stopping = false;      // stopRec の二重呼び出し防止
 let savedOnce = false;     // onstop の二重発火防止
+let cancelRec = false;     // キャンセル時は保存しない
+let isManual  = false;     // モード状態（true=manual）
+
+/* ======================================================
+   モードトグル表示 (auto / manual)
+   ====================================================== */
+document.addEventListener('DOMContentLoaded', () => {
+  const modeTgl   = $('#modeToggle');
+  const modeLabel = $('#modeLabel');
+  if (!modeTgl || !modeLabel) return;
+  const upd = () => {
+    isManual = modeTgl.checked;
+    modeLabel.textContent = isManual ? 'manual' : 'auto';
+  };
+  upd();
+  modeTgl.addEventListener('change', upd);
+
+  /* 一行コピー機能 */
+  const result = $('#result');
+  if (result) {
+    // click や touchstart 両方をハンドリング
+    const copyLine = e => {
+      // どちらを押しても .msg 全体に遡る
+      const msg = e.target.closest('.msg');
+      if (!msg) return;
+      // タイムスタンプを除き .txt 要素だけコピー
+      const txt = msg.querySelector('.txt')?.innerText || '';
+      navigator.clipboard?.writeText(txt);
+      msg.classList.add('copied');             // 背景色を変える
+      setTimeout(() => msg.classList.remove('copied'), 800);
+    };
+    result.addEventListener('click', copyLine, { capture: true });
+    result.addEventListener('touchstart', copyLine, { passive: true });
+  }
+});
+
+/* 待機ヘルパ：キューが空になるまで待つ */
+const waitQueue = async () => {
+  while (busy || queue.length) await sleep(200);
+};
+
+/* ======================================================
+   ヘッダの録音制御ボタン表示を更新（マイク⇔✅❌）
+   ====================================================== */
+function updateHeaderButtons(){
+  const recBtn  = $('#recordBtn');
+  const finBtn  = $('#finishBtn');
+  const canBtn  = $('#cancelBtn');
+  if (!recBtn || !finBtn || !canBtn) return;
+  recBtn.hidden   = rec;
+  finBtn.hidden   = canBtn.hidden = !rec;
+  recBtn.disabled = rec;
+}
 
 /* ======================================================
    IndexedDB（履歴）
@@ -88,7 +141,7 @@ async function putHist(obj) {
    ====================================================== */
 async function startRec() {
   if (!apiKey) { openModal(); return; }
-  if (!vadE) {
+  if (!isManual && !vadE) {               // manual では無音検知しない
     vadE = await vad.MicVAD.new({
       noise_threshold: 0.15,
       positiveSpeechThreshold: 0.6,
@@ -99,13 +152,13 @@ async function startRec() {
   queue.length = 0; busy = false; $('#player').src = '';
   rec = true; segs.length = 0; $('#result').innerHTML = '';
   $('#counter').textContent = '';
-  const stream = vadE.stream ?? await navigator.mediaDevices.getUserMedia({ audio: true });
+  const stream = vadE?.stream ?? await navigator.mediaDevices.getUserMedia({ audio: true });
   mediaRec = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
   mrChunks = [];
   mediaRec.ondataavailable = e => mrChunks.push(e.data);
   mediaRec.start();
 
-  await vadE.start();
+  if (!isManual) await vadE.start();      // manual では起動しない
   remainMs = TOTAL_MS;
   timer = setTimeout(stopRec, remainMs);
   tick = setInterval(() => { remainMs -= 1000; $('#counter').textContent = `残り ${Math.floor(remainMs/60000)}:${pad((remainMs/1000)%60)}`; }, 1000);
@@ -125,8 +178,22 @@ function stopRec() {
     if (savedOnce) return; // onstop 二重発火ガード
     savedOnce = true;
     currentBlob = new Blob(mrChunks, { type: 'audio/webm' });
-    await saveHist();
-    stopping = false;     // 完了後フラグ解除
+
+    /* ── ここで残りの音声全文を文字起こしへ送信 ── */
+    if (!cancelRec) {
+      const url = URL.createObjectURL(currentBlob);
+      const idx = appendSeg('…文字起こし中…', url, true);
+      enqueue(currentBlob, url, idx);        // 最後の塊を Whisper へ
+      await waitQueue();                     // キュー処理が終わるまで待機
+      await saveHist();                      // 文字起こし反映後に履歴保存
+    } else {
+      // キャンセル時は結果・履歴とも破棄
+      segs.length = 0;
+      $('#result').innerHTML = '';
+      cancelRec = false;
+    }
+    stopping = false;                 // 完了後フラグ解除
+    updateHeaderButtons();            // 停止後にヘッダ復帰
   };
   mediaRec.stop();
 
@@ -135,13 +202,17 @@ function stopRec() {
 }
 
 async function handleChunk(arr) {
+  if (isManual) return;           // manual モードではスキップ
   const blob = new Blob([vad.utils.encodeWAV(arr)], { type: 'audio/wav' });
   const dataUrl = await blobToDataURL(blob);
   const idx = appendSeg('…文字起こし中…', dataUrl, true);
   enqueue(blob, dataUrl, idx);
 }
 
-function enqueue(file, url, segIdx) { queue.push({ file, url, segIdx }); if (!busy) processQueue(); }
+function enqueue(file, url, segIdx) {
+  queue.push({ file, url, segIdx }); // enqueue with explicit fname below
+  if (!busy) processQueue();
+}
 async function processQueue() {
   if (busy) return; busy = true;
   const WAIT = 10, COOL = 300;
@@ -149,7 +220,8 @@ async function processQueue() {
     const job = queue.shift();
     try {
       const fd = new FormData();
-      fd.append('file', job.file);
+      const fname = job.file.type.includes('wav') ? 'audio.wav' : 'audio.webm';
+      fd.append('file', job.file, fname);           // ファイル名を明示 ★
       fd.append('model', 'whisper-1');
       fd.append('language', 'ja');
       /* ← ここで直近300文字の文脈を添付 */
@@ -177,6 +249,20 @@ async function processQueue() {
 }
 
 /* ======================================================
+   新規セッション（文字起こしメニューで呼び出し）
+   ====================================================== */
+function newSession(){
+  if (rec) stopRec();          // 録音中なら停止
+  segs.length = 0;
+  queue.length = 0;
+  $('#result').innerHTML = '';
+  $('#player').src = '';
+  currentBlob = null;
+  cancelRec = false;
+  updateRecUI();
+}
+
+/* ======================================================
    UI ヘルパ
    ====================================================== */
 function appendSeg(text, audio, loading=false) {
@@ -200,6 +286,7 @@ function updateRecUI() {
   item.querySelector('span').textContent = rec ? '停止' : '文字起こし';
   $('#toggle').classList.toggle('rec-on', rec);
   item.classList.toggle('rec-on', rec);
+  updateHeaderButtons();                        // アイコン同期
 }
 
 async function proofread() {
@@ -269,7 +356,9 @@ function dispatch(act) {
   $$('.menu-item').forEach(m => m.classList.remove('active'));
   $(`[data-act="${act}"]`).classList.add('active');
   switch(act) {
-    case 'record': rec ? stopRec() : startRec(); break;
+    case 'record':
+      if (rec) stopRec(); else newSession();
+      break;
     case 'proofread': proofread(); break;
     case 'download': copyText(); break;
     case 'audio': downloadAudio(); break;
@@ -296,6 +385,29 @@ async function init() {
   bindUI();
 }
 init();
+
+// ------- DOMContentLoaded で UI 要素を安全に取得 -------
+document.addEventListener('DOMContentLoaded', () => {
+  /* ==== ページリロード時に完全初期化 ==== */
+  newSession();                               // 画面／配列／Queue をクリア
+  $('#result').scrollTop = 0;
+  updateHeaderButtons();                      // ヘッダ状態を初期化
+
+  const recordBtn = document.getElementById('recordBtn');
+  const finishBtn = document.getElementById('finishBtn');
+  const cancelBtn = document.getElementById('cancelBtn');
+
+  /* ── サイドバー「文字起こし」 ── */
+  document.querySelector('[data-act="record"]')
+    ?.addEventListener('click', () => newSession());
+
+  /* ── ヘッダ録音制御 ── */
+  recordBtn?.addEventListener('click', () => { rec ? stopRec() : startRec(); updateHeaderButtons(); });
+  finishBtn?.addEventListener('click', () => { if (rec) stopRec(); updateHeaderButtons(); });
+  cancelBtn?.addEventListener('click', () => { if (rec) { cancelRec=true; stopRec(); } updateHeaderButtons(); });
+
+  updateHeaderButtons();   // 初期描画
+});
 
 // 小さなユーティリティ
 const sleep = ms => new Promise(r => setTimeout(r, ms));

@@ -61,13 +61,36 @@ nav{flex:1;overflow-y:auto}
 .btnDel:hover i,#clearAll:hover i{color:var(--danger)}
 
 /* メイン領域 */
-#main{flex:1;display:flex;flex-direction:column;padding:18px;overflow-y:auto;overflow-x:hidden;}
+#main{flex:1;display:flex;flex-direction:column;padding:18px;overflow:hidden;} /* ← overflow を hidden に */
+
+/* 結果表示セクションを縦 flex にして #result を伸縮させる */
+.content{flex:1;display:flex;flex-direction:column;gap:8px;overflow:hidden}
+#result{flex:1;overflow-y:auto;background:var(--card);
+        border:1px solid var(--border);border-radius:6px;padding:8px}
+
+/* ヘッダ（ロゴ＋マイク） */
+.header-bar{position:sticky;top:0;z-index:5;
+            display:flex;align-items:center;justify-content:space-between;
+            margin:-18px -18px 14px;padding:14px 18px;background:var(--sidebar)}
+.header-bar #logo{font-weight:600;font-size:18px;margin:0}
+
 .section{margin-bottom:14px}
-.box{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:8px;overflow-y:auto}
-.msg{display:flex;gap:8px;padding:4px;border-radius:4px;cursor:pointer}
-.msg:hover{background:var(--bg)}
-.ts{width:60px;font-size:12px;color:#6b7280}
-.txt{background:#fff;border-radius:4px;padding:4px 6px;flex:1;white-space:pre-wrap}
+
+/* ヘッダ（ロゴ＋トグル＋マイク） */
+.header{display:flex;align-items:center;gap:12px}
+#logo{margin-right:auto}
+
+/* 録音制御ボタン */
+.rec-ctl{display:flex;gap:6px}
+
+/* トグル（既存スイッチ用最小定義） */
+.switch{position:relative;width:40px;height:20px}
+.switch input{display:none}
+.slider{position:absolute;inset:0;background:#ccc;border-radius:20px;cursor:pointer;transition:.2s}
+.slider:before{content:"";position:absolute;width:16px;height:16px;left:2px;top:2px;
+               background:#fff;border-radius:50%;transition:.2s}
+input:checked+.slider{background:#10a37f}
+input:checked+.slider:before{transform:translateX(20px)}
 
 /* モーダル */
 .modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.3)}
@@ -77,6 +100,12 @@ nav{flex:1;overflow-y:auto}
 .modal-box input{width:100%;padding:6px;border:1px solid var(--border);border-radius:4px;margin-top:6px}
 .modal-box button{margin-top:10px;width:100%;padding:8px;border:none;border-radius:4px;
                  background:var(--accent);color:#fff;cursor:pointer}
+
+/* 録音パネル廃止 */
+/* recPanel, panel-btn 定義を削除 */
+
+/* hidden 属性保証 */
+[hidden]{display:none!important;}
 
 /* レスポンシブ（≤768px）*/
 @media (max-width:768px){
@@ -90,3 +119,11 @@ nav{flex:1;overflow-y:auto}
   #backdrop{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;z-index:1050;}
   #backdrop.show{display:block;}
 }
+
+/* アイコンボタン */
+.icon-btn{border:none;background:none;cursor:pointer;padding:4px}
+.icon-btn svg{display:block;margin:auto}
+.rec-only{width:32px;height:32px}
+
+/* 1行コピー後のフィードバック */
+.msg.copied{background:rgba(16,163,127,.12);transition:background .8s}
