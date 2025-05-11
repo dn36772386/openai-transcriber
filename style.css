@@ -142,5 +142,5 @@ input:checked+.slider:before{transform:translateX(20px)}
 .txt{
   flex:1;                /* 残り幅をすべて使用 */
   white-space:pre-wrap;
-  margin-left:2px;
+  margin-left:4px;
 }
