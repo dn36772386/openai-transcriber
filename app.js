@@ -427,6 +427,28 @@ document.addEventListener('DOMContentLoaded', () => {
   cancelBtn?.addEventListener('click', () => { if (rec) { cancelRec=true; stopRec(); } updateHeaderButtons(); });
 
   updateHeaderButtons();   // 初期描画
+
+  // PWA Service Worker 更新監視
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js')
+      .then(reg => console.log('[SW] registered', reg.scope))
+      .catch(err => console.error('[SW] register failed', err));
+
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      // 新しい SW が制御権を握ったら 1 回だけリロード
+      if (window._swRld) return;
+      window._swRld = true;
+      location.reload();
+    });
+
+    // sw.js が activate で postMessage('sw-updated') を送ってくる
+    navigator.serviceWorker.addEventListener('message', evt => {
+      if (evt.data === 'sw-updated') {
+        console.log('[SW] updated – reloading');
+        navigator.serviceWorker.controller && navigator.serviceWorker.controller.postMessage('skipWaiting');
+      }
+    });
+  }
 });
 
 // 小さなユーティリティ

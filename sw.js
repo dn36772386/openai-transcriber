@@ -1,4 +1,4 @@
-const CACHE_NAME = 'transcriber-v2';
+const CACHE_NAME = 'transcriber-v3';   // ★ 版数を必ず上げる
 const ASSETS = [
   './',
   './index.html',
@@ -24,6 +24,8 @@ self.addEventListener('activate', e => {
         keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k))
       )
     )
+    .then(() => self.clients.matchAll())   // ★ 更新を各クライアントへ通知
+    .then(clients => clients.forEach(c => c.postMessage('sw-updated')))
   );
 });
 
