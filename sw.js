@@ -1,4 +1,4 @@
-const CACHE_NAME = 'transcriber-v3.2';   // ★ 版数を必ず上げる
+const CACHE_NAME = 'transcriber-v3.3';   // ★ 版数を必ず上げる
 const ASSETS = [
   './',
   './index.html',

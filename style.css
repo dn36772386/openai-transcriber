@@ -136,10 +136,11 @@ input:checked+.slider:before{transform:translateX(20px)}
   width:50px;            /* ← 幅を狭く */
   font-size:13px;
   color:#555;
-  flex:0 1 50px;         /* 固定幅で縮まない */
+  flex:0 0 50px;         /* 固定幅で縮まない */
   text-align:left
 }
 .txt{
   flex:1;                /* 残り幅をすべて使用 */
-  white-space:pre-wrap
+  white-space:pre-wrap;
+  margin-left:2px;
 }
