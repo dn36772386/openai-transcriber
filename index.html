@@ -741,7 +741,7 @@
             // jsQRライブラリの読み込みを待つ
             try {
                 addDebugLog('jsQRライブラリの読み込みを確認中...', 'info');
-                await checkJsQRLoaded();
+
                 addDebugLog('jsQRライブラリ読み込み完了', 'success');
             } catch (error) {
                 addDebugLog(`jsQRライブラリ読み込みエラー: ${error.message}`, 'error');
