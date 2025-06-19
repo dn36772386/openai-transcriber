@@ -248,6 +248,61 @@
             background-color: #fff3cd;
             color: #664d03;
         }
+        .debug-panel {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            border-radius: 10px;
+            padding: 15px;
+            margin: 20px 0;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .debug-log {
+            margin: 2px 0;
+            padding: 2px 5px;
+            background-color: rgba(255,255,255,0.5);
+            border-radius: 3px;
+        }
+        .debug-controls {
+            margin: 10px 0;
+            text-align: center;
+        }
+        .debug-btn {
+            padding: 8px 16px;
+            margin: 0 5px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            background-color: #6c757d;
+            color: white;
+        }
+        .debug-btn:hover {
+            background-color: #5a6268;
+        }
+        .scan-indicator {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background-color: #dc3545;
+            animation: blink 1s infinite;
+        }
+        .scan-indicator.scanning {
+            background-color: #ffc107;
+        }
+        .scan-indicator.detected {
+            background-color: #28a745;
+            animation: none;
+        }
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0.3; }
+        }
         /* レスポンシブ対応 */
         @media (max-width: 768px) {
             .container {
@@ -285,7 +340,7 @@
                 <div class="setting-item">
                     <label>切り替え速度:</label>
                     <select id="sendSpeed">
-                        <option value="6000">ゆっくり (2秒)</option>
+                        <option value="2000">ゆっくり (2秒)</option>
                         <option value="1000">標準 (1秒)</option>
                         <option value="500" selected>高速 (0.5秒)</option>
                         <option value="300">超高速 (0.3秒)</option>
@@ -354,6 +409,18 @@
             <div id="videoContainer">
                 <video id="video"></video>
                 <canvas id="canvas"></canvas>
+                <div class="scan-indicator" id="scanIndicator" title="スキャン状態"></div>
+            </div>
+
+            <div class="debug-controls">
+                <button class="debug-btn" onclick="toggleDebug()">🐛 デバッグパネル表示/非表示</button>
+                <button class="debug-btn" onclick="copyDebugLog()">📋 ログをコピー</button>
+                <button class="debug-btn" onclick="clearDebugLog()">🗑️ ログをクリア</button>
+            </div>
+
+            <div class="debug-panel" id="debugPanel" style="display:none;">
+                <strong>デバッグログ:</strong>
+                <div id="debugLogs"></div>
             </div>
 
             <div class="progress" style="display:none;">
@@ -393,6 +460,75 @@
         let headerReceived = false;
         let lastReceivedIndex = -1;
         let receiveStartTime = null;
+        
+        // デバッグ用変数
+        let debugLogs = [];
+        let scanAttempts = 0;
+        let lastDetectedCode = null;
+        let debugMode = false;
+
+        // デバッグログ追加
+        function addDebugLog(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString('ja-JP', { hour12: false, milliseconds: true });
+            const log = `[${timestamp}] [${type.toUpperCase()}] ${message}`;
+            debugLogs.push(log);
+            
+            // 最新100件のみ保持
+            if (debugLogs.length > 100) {
+                debugLogs.shift();
+            }
+            
+            // デバッグパネルが表示されている場合は更新
+            if (debugMode) {
+                updateDebugPanel();
+            }
+        }
+
+        // デバッグパネル更新
+        function updateDebugPanel() {
+            const debugDiv = document.getElementById('debugLogs');
+            debugDiv.innerHTML = debugLogs.map(log => {
+                let className = 'debug-log';
+                if (log.includes('[ERROR]')) className += ' text-danger';
+                else if (log.includes('[SUCCESS]')) className += ' text-success';
+                else if (log.includes('[WARNING]')) className += ' text-warning';
+                return `<div class="${className}">${log}</div>`;
+            }).join('');
+            debugDiv.scrollTop = debugDiv.scrollHeight;
+        }
+
+        // デバッグパネル表示切替
+        function toggleDebug() {
+            debugMode = !debugMode;
+            document.getElementById('debugPanel').style.display = debugMode ? 'block' : 'none';
+            if (debugMode) {
+                updateDebugPanel();
+            }
+        }
+
+        // デバッグログコピー
+        function copyDebugLog() {
+            const logText = debugLogs.join('\n');
+            navigator.clipboard.writeText(logText).then(() => {
+                alert('デバッグログをクリップボードにコピーしました');
+            }).catch(err => {
+                console.error('コピーに失敗:', err);
+                // フォールバック
+                const textarea = document.createElement('textarea');
+                textarea.value = logText;
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textarea);
+                alert('デバッグログをクリップボードにコピーしました（フォールバック）');
+            });
+        }
+
+        // デバッグログクリア
+        function clearDebugLog() {
+            debugLogs = [];
+            updateDebugPanel();
+        }
 
         // モード切替
         function setMode(mode) {
@@ -597,6 +733,8 @@
 
         // スキャン開始
         function startScanning() {
+            addDebugLog('スキャン開始処理を実行', 'info');
+            
             video = document.getElementById('video');
             canvasElement = document.getElementById('canvas');
             canvas = canvasElement.getContext('2d');
@@ -606,21 +744,34 @@
             totalChunks = 0;
             lastReceivedIndex = -1;
             receiveStartTime = Date.now();
+            scanAttempts = 0;
 
             document.querySelector('#receiveSection .start-btn').style.display = 'none';
             document.querySelector('#receiveSection .stop-btn').style.display = 'inline-block';
             document.getElementById('receiveStatus').style.display = 'block';
             document.getElementById('receiveStatus').textContent = '🔍 QRコードを探しています...';
             document.getElementById('receiveStatus').className = 'status-message status-waiting';
+            document.getElementById('scanIndicator').className = 'scan-indicator scanning';
 
+            addDebugLog('カメラアクセスを要求', 'info');
+            
             navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
                 .then(function(stream) {
+                    addDebugLog('カメラアクセス成功', 'success');
+                    addDebugLog(`ストリーム情報: ${stream.getVideoTracks()[0].label}`, 'info');
+                    
                     video.srcObject = stream;
                     video.setAttribute('playsinline', true);
                     video.play();
+                    
+                    video.onloadedmetadata = function() {
+                        addDebugLog(`ビデオサイズ: ${video.videoWidth}x${video.videoHeight}`, 'info');
+                    };
+                    
                     requestAnimationFrame(tick);
                 })
                 .catch(function(err) {
+                    addDebugLog(`カメラアクセスエラー: ${err.name} - ${err.message}`, 'error');
                     console.error('カメラの起動に失敗しました:', err);
                     alert('カメラへのアクセスが拒否されました。ブラウザの設定を確認してください。');
                     stopScanning();
@@ -629,38 +780,76 @@
 
         // スキャン停止
         function stopScanning() {
+            addDebugLog('スキャン停止', 'info');
             scanning = false;
             if (video && video.srcObject) {
                 video.srcObject.getTracks().forEach(track => track.stop());
             }
             document.querySelector('#receiveSection .start-btn').style.display = 'inline-block';
             document.querySelector('#receiveSection .stop-btn').style.display = 'none';
+            document.getElementById('scanIndicator').className = 'scan-indicator';
         }
 
         // QRコードスキャン処理
         function tick() {
             if (!scanning) return;
+            
+            scanAttempts++;
+            if (scanAttempts % 30 === 0) { // 約1秒ごとにログ
+                addDebugLog(`スキャン試行回数: ${scanAttempts}回`, 'info');
+            }
 
             if (video.readyState === video.HAVE_ENOUGH_DATA) {
                 canvasElement.height = video.videoHeight;
                 canvasElement.width = video.videoWidth;
                 canvas.drawImage(video, 0, 0, canvasElement.width, canvasElement.height);
-                const imageData = canvas.getImageData(0, 0, canvasElement.width, canvasElement.height);
-                const code = jsQR(imageData.data, imageData.width, imageData.height);
                 
-                if (code) {
-                    try {
-                        const data = JSON.parse(code.data);
-                        if (data.type === 'header') {
-                            processHeader(data);
-                        } else if (data.type === 'chunk' && headerReceived) {
-                            processChunk(data);
+                try {
+                    const imageData = canvas.getImageData(0, 0, canvasElement.width, canvasElement.height);
+                    const code = jsQR(imageData.data, imageData.width, imageData.height);
+                    
+                    if (code) {
+                        document.getElementById('scanIndicator').className = 'scan-indicator detected';
+                        
+                        if (code.data !== lastDetectedCode) {
+                            lastDetectedCode = code.data;
+                            addDebugLog(`QRコード検出: ${code.data.substring(0, 100)}...`, 'success');
+                            
+                            try {
+                                const data = JSON.parse(code.data);
+                                addDebugLog(`データタイプ: ${data.type}`, 'info');
+                                
+                                if (data.type === 'header') {
+                                    addDebugLog(`ヘッダー受信: ファイル名=${data.fileName}, チャンク数=${data.totalChunks}`, 'success');
+                                    processHeader(data);
+                                } else if (data.type === 'chunk') {
+                                    if (!headerReceived) {
+                                        addDebugLog('ヘッダー未受信のためチャンクをスキップ', 'warning');
+                                    } else {
+                                        addDebugLog(`チャンク受信: インデックス=${data.chunkIndex}`, 'info');
+                                        processChunk(data);
+                                    }
+                                } else {
+                                    addDebugLog(`未知のデータタイプ: ${data.type}`, 'warning');
+                                }
+                            } catch (e) {
+                                addDebugLog(`JSON解析エラー: ${e.message}`, 'error');
+                                addDebugLog(`受信データ: ${code.data.substring(0, 200)}...`, 'error');
+                            }
                         }
-                    } catch (e) {
-                        console.error('QRコードの解析エラー:', e);
+                    } else {
+                        document.getElementById('scanIndicator').className = 'scan-indicator scanning';
+                        lastDetectedCode = null;
                     }
+                } catch (e) {
+                    addDebugLog(`スキャンエラー: ${e.message}`, 'error');
+                }
+            } else {
+                if (scanAttempts % 30 === 0) {
+                    addDebugLog(`ビデオ準備状態: ${video.readyState}`, 'warning');
                 }
             }
+            
             requestAnimationFrame(tick);
         }
 
@@ -672,6 +861,8 @@
                 receivedFileType = data.fileType;
                 isCompressed = data.compressed || false;
                 totalChunks = data.totalChunks;
+                
+                addDebugLog(`ヘッダー処理完了: ${receivedFileName} (${totalChunks}チャンク)`, 'success');
                 
                 document.getElementById('receivedFileName').textContent = receivedFileName;
                 document.getElementById('totalCount').textContent = totalChunks;
@@ -687,15 +878,22 @@
 
         // チャンク処理
         function processChunk(data) {
-            if (data.chunkIndex < 0 || data.chunkIndex >= totalChunks) return;
+            if (data.chunkIndex < 0 || data.chunkIndex >= totalChunks) {
+                addDebugLog(`無効なチャンクインデックス: ${data.chunkIndex}`, 'error');
+                return;
+            }
             
             // 既に受信済みの場合はスキップ
-            if (receivedChunks.hasOwnProperty(data.chunkIndex)) return;
+            if (receivedChunks.hasOwnProperty(data.chunkIndex)) {
+                return;
+            }
             
             // チャンク保存
             receivedChunks[data.chunkIndex] = data.data;
             lastReceivedIndex = data.chunkIndex;
             updateChunkGrid('receive', data.chunkIndex, 'received');
+            
+            addDebugLog(`チャンク ${data.chunkIndex + 1}/${totalChunks} を保存`, 'success');
             
             // 進捗更新
             const receivedCount = Object.keys(receivedChunks).length;
@@ -709,6 +907,7 @@
             // 全チャンク受信完了
             if (receivedCount === totalChunks) {
                 const receiveTime = Math.round((Date.now() - receiveStartTime) / 1000);
+                addDebugLog(`全チャンク受信完了！ 所要時間: ${receiveTime}秒`, 'success');
                 document.getElementById('receiveStatus').textContent = `✅ 受信完了！（${receiveTime}秒）`;
                 document.getElementById('receiveStatus').className = 'status-message status-complete';
                 stopScanning();
