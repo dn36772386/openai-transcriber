@@ -8,7 +8,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <!-- 圧縮ライブラリ -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
-    <!-- QRコード読み取りライブラリ（cdnjs.cloudflare.comのみ使用） -->
+    <!-- QRコード読み取りライブラリ -->
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
     <style>
         body {
@@ -219,8 +219,13 @@
             color: white;
             transition: all 0.3s;
         }
+        .chunk-indicator.waiting {
+            background-color: #e0e0e0;
+            color: #666;
+        }
         .chunk-indicator.received {
             background-color: #28a745;
+            animation: receivedPulse 0.5s ease-out;
         }
         .chunk-indicator.current {
             background-color: #ffc107;
@@ -230,6 +235,10 @@
             0% { transform: scale(1); }
             50% { transform: scale(1.1); }
             100% { transform: scale(1); }
+        }
+        @keyframes receivedPulse {
+            0% { transform: scale(1.3); opacity: 0.7; }
+            100% { transform: scale(1); opacity: 1; }
         }
         .status-message {
             text-align: center;
@@ -616,7 +625,7 @@
             
             for (let i = 0; i < totalChunks; i++) {
                 const indicator = document.createElement('div');
-                indicator.className = 'chunk-indicator';
+                indicator.className = mode === 'receive' ? 'chunk-indicator waiting' : 'chunk-indicator';
                 indicator.textContent = i + 1;
                 indicator.title = `チャンク ${i + 1}`;
                 grid.appendChild(indicator);
@@ -735,37 +744,22 @@
         }
 
         // スキャン開始
-        async function startScanning() {
+        function startScanning() {
             addDebugLog('スキャン開始処理を実行', 'info');
             
-            // jsQRライブラリの読み込みを待つ
-            try {
-                addDebugLog('jsQRライブラリの読み込みを確認中...', 'info');
-
-                addDebugLog('jsQRライブラリ読み込み完了', 'success');
-            } catch (error) {
-                addDebugLog(`jsQRライブラリ読み込みエラー: ${error.message}`, 'error');
+            // jsQRライブラリの確認
+            if (typeof jsQR === 'undefined') {
+                addDebugLog('jsQRライブラリが見つかりません', 'error');
                 alert('QRコード読み取りライブラリが読み込まれていません。\nページを再読み込みしてください。');
                 return;
             }
             
-            // jsQRの存在を再確認
-            if (typeof jsQR === 'undefined') {
-                addDebugLog('jsQRがグローバルスコープに存在しません', 'error');
-                // windowオブジェクトも確認
-                if (typeof window.jsQR !== 'undefined') {
-                    addDebugLog('window.jsQRは存在します', 'info');
-                    // グローバル変数として設定
-                    window.jsQR = window.jsQR;
-                } else {
-                    alert('QRコード読み取り機能が利用できません。');
-                    return;
-                }
-            }
+            addDebugLog('jsQRライブラリ確認OK', 'success');
             
             video = document.getElementById('video');
             canvasElement = document.getElementById('canvas');
-            canvas = canvasElement.getContext('2d');
+            // willReadFrequently属性を設定してパフォーマンスを最適化
+            canvas = canvasElement.getContext('2d', { willReadFrequently: true });
             scanning = true;
             headerReceived = false;
             receivedChunks = {};
@@ -792,34 +786,27 @@
                 }
             };
             
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia(constraints);
-                addDebugLog('カメラアクセス成功', 'success');
-                addDebugLog(`ストリーム情報: ${stream.getVideoTracks()[0].label}`, 'info');
-                
-                video.srcObject = stream;
-                video.setAttribute('playsinline', true);
-                
-                // ビデオの準備を待つ
-                await new Promise((resolve) => {
+            navigator.mediaDevices.getUserMedia(constraints)
+                .then(function(stream) {
+                    addDebugLog('カメラアクセス成功', 'success');
+                    addDebugLog(`ストリーム情報: ${stream.getVideoTracks()[0].label}`, 'info');
+                    
+                    video.srcObject = stream;
+                    video.setAttribute('playsinline', true);
+                    
+                    // ビデオの準備を待つ
                     video.onloadedmetadata = function() {
                         addDebugLog(`ビデオサイズ: ${video.videoWidth}x${video.videoHeight}`, 'info');
-                        resolve();
+                        video.play();
+                        requestAnimationFrame(tick);
                     };
+                })
+                .catch(function(err) {
+                    addDebugLog(`カメラアクセスエラー: ${err.name} - ${err.message}`, 'error');
+                    console.error('カメラの起動に失敗しました:', err);
+                    alert('カメラへのアクセスが拒否されました。ブラウザの設定を確認してください。');
+                    stopScanning();
                 });
-                
-                await video.play();
-                addDebugLog('ビデオ再生開始', 'success');
-                
-                // スキャン開始
-                requestAnimationFrame(tick);
-                
-            } catch (err) {
-                addDebugLog(`カメラアクセスエラー: ${err.name} - ${err.message}`, 'error');
-                console.error('カメラの起動に失敗しました:', err);
-                alert('カメラへのアクセスが拒否されました。ブラウザの設定を確認してください。');
-                stopScanning();
-            }
         }
 
         // スキャン停止
@@ -942,7 +929,18 @@
             // チャンク保存
             receivedChunks[data.chunkIndex] = data.data;
             lastReceivedIndex = data.chunkIndex;
+            
+            // アニメーション付きで更新
             updateChunkGrid('receive', data.chunkIndex, 'received');
+            
+            // 受信したチャンクの番号を点滅させる
+            const indicator = document.querySelector(`#receiveChunkGrid .chunk-indicator:nth-child(${data.chunkIndex + 1})`);
+            if (indicator) {
+                indicator.style.animation = 'none';
+                setTimeout(() => {
+                    indicator.style.animation = 'receivedPulse 0.5s ease-out';
+                }, 10);
+            }
             
             addDebugLog(`チャンク ${data.chunkIndex + 1}/${totalChunks} を保存`, 'success');
             
@@ -961,6 +959,13 @@
                 addDebugLog(`全チャンク受信完了！ 所要時間: ${receiveTime}秒`, 'success');
                 document.getElementById('receiveStatus').textContent = `✅ 受信完了！（${receiveTime}秒）`;
                 document.getElementById('receiveStatus').className = 'status-message status-complete';
+                
+                // 全てのインジケーターを完了状態にする
+                const allIndicators = document.querySelectorAll('#receiveChunkGrid .chunk-indicator');
+                allIndicators.forEach(ind => {
+                    ind.style.animation = 'receivedPulse 0.3s ease-out';
+                });
+                
                 stopScanning();
                 document.getElementById('downloadBtn').style.display = 'inline-block';
             }
