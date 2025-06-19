@@ -564,55 +564,125 @@
             const file = e.target.files[0];
             if (!file) return;
 
+            // 処理中インジケーターを表示
+            document.getElementById('fileInfo').style.display = 'block';
+            document.getElementById('fileName').textContent = file.name;
+            document.getElementById('fileSize').textContent = formatFileSize(file.size);
+            document.getElementById('compressedSize').textContent = '処理中...';
+            document.getElementById('chunkCount').textContent = '計算中...';
+            
+            // プログレスバーを表示
+            document.querySelector('#sendSection .progress').style.display = 'block';
+            const progressBar = document.getElementById('sendProgress');
+            progressBar.style.width = '0%';
+            progressBar.textContent = 'ファイル読み込み中...';
+
             const reader = new FileReader();
             reader.onload = async function(e) {
-                const arrayBuffer = e.target.result;
-                const uint8Array = new Uint8Array(arrayBuffer);
-                
-                // 圧縮設定確認
-                const useCompression = document.getElementById('useCompression').checked;
-                let processedData;
-                
-                if (useCompression) {
-                    processedData = pako.deflate(uint8Array);
-                    isCompressed = true;
-                } else {
-                    processedData = uint8Array;
-                    isCompressed = false;
-                }
-                
-                // Base64エンコード
-                const base64Data = btoa(String.fromCharCode.apply(null, processedData));
-                
-                fileData = {
-                    name: file.name,
-                    type: file.type,
-                    data: base64Data,
-                    compressed: isCompressed,
-                    originalSize: file.size,
-                    compressedSize: processedData.length
-                };
-                
-                // チャンクに分割
-                const chunkSize = parseInt(document.getElementById('chunkSize').value);
-                chunks = [];
-                const dataLength = fileData.data.length;
-                for (let i = 0; i < dataLength; i += chunkSize) {
-                    chunks.push(fileData.data.substr(i, chunkSize));
-                }
+                try {
+                    const arrayBuffer = e.target.result;
+                    const uint8Array = new Uint8Array(arrayBuffer);
+                    
+                    // 圧縮設定確認
+                    const useCompression = document.getElementById('useCompression').checked;
+                    let processedData;
+                    
+                    progressBar.style.width = '30%';
+                    progressBar.textContent = '圧縮処理中...';
+                    
+                    // 非同期で圧縮処理を実行
+                    await new Promise((resolve) => {
+                        setTimeout(() => {
+                            if (useCompression) {
+                                // 大きなファイルの場合は圧縮レベルを調整
+                                const compressionLevel = file.size > 5 * 1024 * 1024 ? 1 : 6; // 5MB以上は高速圧縮
+                                processedData = pako.deflate(uint8Array, { level: compressionLevel });
+                                isCompressed = true;
+                            } else {
+                                processedData = uint8Array;
+                                isCompressed = false;
+                            }
+                            resolve();
+                        }, 10);
+                    });
+                    
+                    progressBar.style.width = '60%';
+                    progressBar.textContent = 'Base64エンコード中...';
+                    
+                    // Base64エンコードを分割処理
+                    let base64Data = '';
+                    const chunkSize = 100000; // 100KBずつ処理
+                    
+                    for (let i = 0; i < processedData.length; i += chunkSize) {
+                        await new Promise((resolve) => {
+                            setTimeout(() => {
+                                const chunk = processedData.slice(i, Math.min(i + chunkSize, processedData.length));
+                                base64Data += btoa(String.fromCharCode.apply(null, chunk));
+                                
+                                const progress = 60 + (i / processedData.length) * 30;
+                                progressBar.style.width = progress + '%';
+                                progressBar.textContent = `エンコード中... ${Math.round(progress)}%`;
+                                resolve();
+                            }, 1);
+                        });
+                    }
+                    
+                    fileData = {
+                        name: file.name,
+                        type: file.type,
+                        data: base64Data,
+                        compressed: isCompressed,
+                        originalSize: file.size,
+                        compressedSize: processedData.length
+                    };
+                    
+                    progressBar.style.width = '90%';
+                    progressBar.textContent = 'チャンク分割中...';
+                    
+                    // チャンクに分割
+                    await new Promise((resolve) => {
+                        setTimeout(() => {
+                            const chunkSize = parseInt(document.getElementById('chunkSize').value);
+                            chunks = [];
+                            const dataLength = fileData.data.length;
+                            for (let i = 0; i < dataLength; i += chunkSize) {
+                                chunks.push(fileData.data.substr(i, chunkSize));
+                            }
+                            resolve();
+                        }, 10);
+                    });
 
-                // ファイル情報表示
-                document.getElementById('fileName').textContent = file.name;
-                document.getElementById('fileSize').textContent = formatFileSize(file.size);
-                document.getElementById('compressedSize').textContent = formatFileSize(processedData.length);
-                document.getElementById('chunkCount').textContent = chunks.length;
-                document.getElementById('fileInfo').style.display = 'block';
-                document.querySelector('.start-btn').style.display = 'inline-block';
-                document.getElementById('sendStatus').style.display = 'block';
-                
-                // チャンクグリッド初期化
-                initChunkGrid('send', chunks.length);
+                    // ファイル情報表示
+                    document.getElementById('compressedSize').textContent = formatFileSize(processedData.length);
+                    document.getElementById('chunkCount').textContent = chunks.length;
+                    document.querySelector('.start-btn').style.display = 'inline-block';
+                    document.getElementById('sendStatus').style.display = 'block';
+                    
+                    // チャンクグリッド初期化
+                    initChunkGrid('send', chunks.length);
+                    
+                    progressBar.style.width = '100%';
+                    progressBar.textContent = '準備完了！';
+                    
+                    // 3秒後にプログレスバーを隠す
+                    setTimeout(() => {
+                        document.querySelector('#sendSection .progress').style.display = 'none';
+                    }, 3000);
+                    
+                } catch (error) {
+                    console.error('ファイル処理エラー:', error);
+                    alert('ファイルの処理中にエラーが発生しました: ' + error.message);
+                    progressBar.style.width = '0%';
+                    progressBar.textContent = 'エラー';
+                }
             };
+            
+            reader.onerror = function() {
+                alert('ファイルの読み込みに失敗しました');
+                progressBar.style.width = '0%';
+                progressBar.textContent = 'エラー';
+            };
+            
             reader.readAsArrayBuffer(file);
         });
 
