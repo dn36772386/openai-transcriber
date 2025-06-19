@@ -559,6 +559,20 @@
             }
         }
 
+        // Base64エンコード用のヘルパー関数（大きなファイルに対応）
+        function arrayBufferToBase64(buffer) {
+            let binary = '';
+            const bytes = new Uint8Array(buffer);
+            const chunkSize = 0x8000; // 32KB chunks
+            
+            for (let i = 0; i < bytes.length; i += chunkSize) {
+                const chunk = bytes.subarray(i, i + chunkSize);
+                binary += String.fromCharCode.apply(null, chunk);
+            }
+            
+            return btoa(binary);
+        }
+
         // ファイル選択処理
         document.getElementById('fileInput').addEventListener('change', async function(e) {
             const file = e.target.files[0];
@@ -570,6 +584,11 @@
             document.getElementById('fileSize').textContent = formatFileSize(file.size);
             document.getElementById('compressedSize').textContent = '処理中...';
             document.getElementById('chunkCount').textContent = '計算中...';
+            
+            // 処理中メッセージを表示
+            document.getElementById('sendStatus').style.display = 'block';
+            document.getElementById('sendStatus').textContent = '⏳ ファイルを処理中... しばらくお待ちください';
+            document.getElementById('sendStatus').className = 'status-message status-sending';
             
             // プログレスバーを表示
             document.querySelector('#sendSection .progress').style.display = 'block';
@@ -609,23 +628,13 @@
                     progressBar.style.width = '60%';
                     progressBar.textContent = 'Base64エンコード中...';
                     
-                    // Base64エンコードを分割処理
-                    let base64Data = '';
-                    const chunkSize = 100000; // 100KBずつ処理
-                    
-                    for (let i = 0; i < processedData.length; i += chunkSize) {
-                        await new Promise((resolve) => {
-                            setTimeout(() => {
-                                const chunk = processedData.slice(i, Math.min(i + chunkSize, processedData.length));
-                                base64Data += btoa(String.fromCharCode.apply(null, chunk));
-                                
-                                const progress = 60 + (i / processedData.length) * 30;
-                                progressBar.style.width = progress + '%';
-                                progressBar.textContent = `エンコード中... ${Math.round(progress)}%`;
-                                resolve();
-                            }, 1);
-                        });
-                    }
+                    // Base64エンコード（改善版）
+                    const base64Data = await new Promise((resolve) => {
+                        setTimeout(() => {
+                            const result = arrayBufferToBase64(processedData);
+                            resolve(result);
+                        }, 10);
+                    });
                     
                     fileData = {
                         name: file.name,
@@ -656,13 +665,14 @@
                     document.getElementById('compressedSize').textContent = formatFileSize(processedData.length);
                     document.getElementById('chunkCount').textContent = chunks.length;
                     document.querySelector('.start-btn').style.display = 'inline-block';
-                    document.getElementById('sendStatus').style.display = 'block';
                     
                     // チャンクグリッド初期化
                     initChunkGrid('send', chunks.length);
                     
                     progressBar.style.width = '100%';
                     progressBar.textContent = '準備完了！';
+                    document.getElementById('sendStatus').textContent = '✅ 準備完了 - 送信開始を押してください';
+                    document.getElementById('sendStatus').className = 'status-message status-complete';
                     
                     // 3秒後にプログレスバーを隠す
                     setTimeout(() => {
@@ -674,6 +684,8 @@
                     alert('ファイルの処理中にエラーが発生しました: ' + error.message);
                     progressBar.style.width = '0%';
                     progressBar.textContent = 'エラー';
+                    document.getElementById('sendStatus').textContent = '❌ エラーが発生しました';
+                    document.getElementById('sendStatus').className = 'status-message status-waiting';
                 }
             };
             
@@ -681,6 +693,8 @@
                 alert('ファイルの読み込みに失敗しました');
                 progressBar.style.width = '0%';
                 progressBar.textContent = 'エラー';
+                document.getElementById('sendStatus').textContent = '❌ ファイル読み込みエラー';
+                document.getElementById('sendStatus').className = 'status-message status-waiting';
             };
             
             reader.readAsArrayBuffer(file);
@@ -798,19 +812,25 @@
                 }
             }
 
-            // QRコード生成
-            document.getElementById('qrcode').innerHTML = '';
-            qrCode = new QRCode(document.getElementById('qrcode'), {
-                text: qrData,
-                width: 256,
-                height: 256,
-                correctLevel: QRCode.CorrectLevel.L
-            });
+            // QRコード生成前に「生成中」メッセージを表示
+            const qrContainer = document.getElementById('qrcode');
+            qrContainer.innerHTML = '<div style="padding: 50px; color: #666;">QRコード生成中...</div>';
+            
+            // 非同期でQRコード生成
+            setTimeout(() => {
+                qrContainer.innerHTML = '';
+                qrCode = new QRCode(qrContainer, {
+                    text: qrData,
+                    width: 256,
+                    height: 256,
+                    correctLevel: QRCode.CorrectLevel.L
+                });
 
-            // プログレスバー更新（ヘッダーは0%として扱う）
-            const progress = currentChunkIndex === -1 ? 0 : Math.round((currentChunkIndex + 1) / chunks.length * 100);
-            document.getElementById('sendProgress').style.width = progress + '%';
-            document.getElementById('sendProgress').textContent = progress + '%';
+                // プログレスバー更新（ヘッダーは0%として扱う）
+                const progress = currentChunkIndex === -1 ? 0 : Math.round((currentChunkIndex + 1) / chunks.length * 100);
+                document.getElementById('sendProgress').style.width = progress + '%';
+                document.getElementById('sendProgress').textContent = progress + '%';
+            }, 10);
         }
 
         // スキャン開始
