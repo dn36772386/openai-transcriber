@@ -1041,5 +1041,22 @@
             }
         }
     </script>
+    <script>
+    // jsQRライブラリの読み込み確認
+    window.addEventListener('DOMContentLoaded', function() {
+        if (typeof jsQR === 'undefined') {
+            console.error('jsQRライブラリが読み込まれていません');
+            // 動的に再読み込み
+            const script = document.createElement('script');
+            script.src = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js';
+            script.onload = function() {
+                console.log('jsQRライブラリを再読み込みしました');
+            };
+            document.head.appendChild(script);
+        } else {
+            console.log('jsQRライブラリは正常に読み込まれています');
+        }
+    });
+    </script>
 </body>
 </html>
