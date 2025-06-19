@@ -4,9 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>QRコード連続転送システム</title>
+    <!-- QRコード生成ライブラリ -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <!-- 圧縮ライブラリ -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+    <!-- QRコード読み取りライブラリ（cdnjs.cloudflare.comのみ使用） -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -732,8 +735,33 @@
         }
 
         // スキャン開始
-        function startScanning() {
+        async function startScanning() {
             addDebugLog('スキャン開始処理を実行', 'info');
+            
+            // jsQRライブラリの読み込みを待つ
+            try {
+                addDebugLog('jsQRライブラリの読み込みを確認中...', 'info');
+                await checkJsQRLoaded();
+                addDebugLog('jsQRライブラリ読み込み完了', 'success');
+            } catch (error) {
+                addDebugLog(`jsQRライブラリ読み込みエラー: ${error.message}`, 'error');
+                alert('QRコード読み取りライブラリが読み込まれていません。\nページを再読み込みしてください。');
+                return;
+            }
+            
+            // jsQRの存在を再確認
+            if (typeof jsQR === 'undefined') {
+                addDebugLog('jsQRがグローバルスコープに存在しません', 'error');
+                // windowオブジェクトも確認
+                if (typeof window.jsQR !== 'undefined') {
+                    addDebugLog('window.jsQRは存在します', 'info');
+                    // グローバル変数として設定
+                    window.jsQR = window.jsQR;
+                } else {
+                    alert('QRコード読み取り機能が利用できません。');
+                    return;
+                }
+            }
             
             video = document.getElementById('video');
             canvasElement = document.getElementById('canvas');
@@ -755,27 +783,43 @@
 
             addDebugLog('カメラアクセスを要求', 'info');
             
-            navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-                .then(function(stream) {
-                    addDebugLog('カメラアクセス成功', 'success');
-                    addDebugLog(`ストリーム情報: ${stream.getVideoTracks()[0].label}`, 'info');
-                    
-                    video.srcObject = stream;
-                    video.setAttribute('playsinline', true);
-                    video.play();
-                    
+            // カメラ設定
+            const constraints = {
+                video: {
+                    facingMode: 'environment',
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
+                }
+            };
+            
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                addDebugLog('カメラアクセス成功', 'success');
+                addDebugLog(`ストリーム情報: ${stream.getVideoTracks()[0].label}`, 'info');
+                
+                video.srcObject = stream;
+                video.setAttribute('playsinline', true);
+                
+                // ビデオの準備を待つ
+                await new Promise((resolve) => {
                     video.onloadedmetadata = function() {
                         addDebugLog(`ビデオサイズ: ${video.videoWidth}x${video.videoHeight}`, 'info');
+                        resolve();
                     };
-                    
-                    requestAnimationFrame(tick);
-                })
-                .catch(function(err) {
-                    addDebugLog(`カメラアクセスエラー: ${err.name} - ${err.message}`, 'error');
-                    console.error('カメラの起動に失敗しました:', err);
-                    alert('カメラへのアクセスが拒否されました。ブラウザの設定を確認してください。');
-                    stopScanning();
                 });
+                
+                await video.play();
+                addDebugLog('ビデオ再生開始', 'success');
+                
+                // スキャン開始
+                requestAnimationFrame(tick);
+                
+            } catch (err) {
+                addDebugLog(`カメラアクセスエラー: ${err.name} - ${err.message}`, 'error');
+                console.error('カメラの起動に失敗しました:', err);
+                alert('カメラへのアクセスが拒否されました。ブラウザの設定を確認してください。');
+                stopScanning();
+            }
         }
 
         // スキャン停止
@@ -795,7 +839,7 @@
             if (!scanning) return;
             
             scanAttempts++;
-            if (scanAttempts % 30 === 0) { // 約1秒ごとにログ
+            if (scanAttempts % 30 === 0) {
                 addDebugLog(`スキャン試行回数: ${scanAttempts}回`, 'info');
             }
 
@@ -806,9 +850,13 @@
                 
                 try {
                     const imageData = canvas.getImageData(0, 0, canvasElement.width, canvasElement.height);
-                    const code = jsQR(imageData.data, imageData.width, imageData.height);
                     
-                    if (code) {
+                    // jsQRを実行
+                    const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                        inversionAttempts: "dontInvert"
+                    });
+                    
+                    if (code && code.data) {
                         document.getElementById('scanIndicator').className = 'scan-indicator detected';
                         
                         if (code.data !== lastDetectedCode) {
@@ -843,6 +891,9 @@
                     }
                 } catch (e) {
                     addDebugLog(`スキャンエラー: ${e.message}`, 'error');
+                    if (e.stack && scanAttempts % 30 === 0) {
+                        addDebugLog(`スタックトレース: ${e.stack.substring(0, 200)}...`, 'error');
+                    }
                 }
             } else {
                 if (scanAttempts % 30 === 0) {
