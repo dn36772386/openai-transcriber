@@ -668,7 +668,28 @@
                     
                     // チャンクグリッド初期化
                     initChunkGrid('send', chunks.length);
+                    // ここから追加 ↓
+                    // ヘッダーQRコードを初期表示
+                    const headerData = JSON.stringify({
+                        type: 'header',
+                        fileName: fileData.name,
+                        fileType: fileData.type,
+                        compressed: fileData.compressed,
+                        totalChunks: chunks.length,
+                        timestamp: Date.now()
+                    });
                     
+                    document.getElementById('qrcode').innerHTML = '';
+                    new QRCode(document.getElementById('qrcode'), {
+                        text: headerData,
+                        width: 256,
+                        height: 256,
+                        correctLevel: QRCode.CorrectLevel.L
+                    });
+                    
+                    document.getElementById('currentChunk').textContent = 'ヘッダー情報（待機中）';
+                    document.getElementById('currentChunkInfo').style.display = 'block';
+                                        
                     progressBar.style.width = '100%';
                     progressBar.textContent = '準備完了！';
                     document.getElementById('sendStatus').textContent = '✅ 準備完了 - 送信開始を押してください';
