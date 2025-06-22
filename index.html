@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QRコード連続転送システム</title>
+    <title>QRコード連続転送システム（最適化版）</title>
     <!-- QRコード生成ライブラリ -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <!-- 圧縮ライブラリ -->
@@ -260,6 +260,10 @@
             background-color: #fff3cd;
             color: #664d03;
         }
+        .status-error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
         .debug-panel {
             background-color: #f8d7da;
             border: 1px solid #f5c6cb;
@@ -315,6 +319,24 @@
             0%, 50% { opacity: 1; }
             51%, 100% { opacity: 0.3; }
         }
+        .warning {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
+            padding: 12px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .qr-size-display {
+            text-align: center;
+            margin: 10px 0;
+            font-size: 14px;
+            color: #6c757d;
+        }
+        .qr-size-display.warning {
+            color: #dc3545;
+            font-weight: bold;
+        }
         /* レスポンシブ対応 */
         @media (max-width: 768px) {
             .container {
@@ -332,7 +354,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>📡 QRコード連続転送システム</h1>
+        <h1>📡 QRコード連続転送システム（最適化版）</h1>
         
         <div class="mode-selector">
             <button class="mode-btn active" onclick="setMode('send')">📤 送信モード</button>
@@ -347,7 +369,8 @@
                 <h3>⚙️ 転送設定</h3>
                 <div class="setting-item">
                     <label>チャンクサイズ (バイト):</label>
-                    <input type="number" id="chunkSize" value="1000" min="100" max="2000">
+                    <input type="number" id="chunkSize" value="400" min="100" max="500">
+                    <small style="color: #6c757d;">推奨: 300-400</small>
                 </div>
                 <div class="setting-item">
                     <label>切り替え速度:</label>
@@ -362,6 +385,10 @@
                     <label>データ圧縮を使用:</label>
                     <input type="checkbox" id="useCompression" checked>
                 </div>
+                <div class="setting-item">
+                    <label>最大ファイルサイズ:</label>
+                    <span>制限なし（ストリーミング処理対応）</span>
+                </div>
             </div>
 
             <label for="fileInput" class="file-label">📁 ファイルを選択</label>
@@ -372,6 +399,7 @@
                 <p><strong>📊 元のサイズ:</strong> <span id="fileSize"></span></p>
                 <p><strong>🗜️ 圧縮後サイズ:</strong> <span id="compressedSize"></span></p>
                 <p><strong>🔢 チャンク数:</strong> <span id="chunkCount"></span></p>
+                <p><strong>⏱️ 推定転送時間:</strong> <span id="estimatedTime"></span></p>
             </div>
 
             <div class="controls">
@@ -385,6 +413,7 @@
 
             <div id="qrDisplay">
                 <div id="qrcode"></div>
+                <div class="qr-size-display" id="qrSizeDisplay"></div>
             </div>
 
             <div class="progress" style="display:none;">
@@ -396,6 +425,7 @@
             <div class="info" id="currentChunkInfo" style="display:none;">
                 <p><strong>🔄 現在のチャンク:</strong> <span id="currentChunk">-</span></p>
                 <p><strong>⏱️ サイクル数:</strong> <span id="cycleCount">0</span></p>
+                <p><strong>📊 実効転送速度:</strong> <span id="transferSpeed">計算中...</span></p>
             </div>
         </div>
 
@@ -443,6 +473,7 @@
                 <p><strong>📄 受信ファイル名:</strong> <span id="receivedFileName"></span></p>
                 <p><strong>📊 受信状況:</strong> <span id="receiveCount">0</span> / <span id="totalCount">0</span> チャンク</p>
                 <p><strong>🔍 不足チャンク:</strong> <span id="missingChunks">-</span></p>
+                <p><strong>⏱️ 経過時間:</strong> <span id="elapsedTime">0秒</span></p>
             </div>
 
             <div class="chunk-grid" id="receiveChunkGrid" style="display:none;"></div>
@@ -458,6 +489,7 @@
         let transmissionInterval = null;
         let qrCode = null;
         let cycleCount = 0;
+        let transmissionStartTime = null;
         
         // 受信用変数
         let receivedChunks = {};
@@ -472,12 +504,58 @@
         let headerReceived = false;
         let lastReceivedIndex = -1;
         let receiveStartTime = null;
+        let elapsedTimeInterval = null;
         
         // デバッグ用変数
         let debugLogs = [];
         let scanAttempts = 0;
         let lastDetectedCode = null;
         let debugMode = false;
+
+        // ストリーミング処理用の定数
+        const STREAM_CHUNK_SIZE = 1024 * 1024; // 1MB単位で処理
+
+        // 改善されたBase64エンコード（大容量対応）
+        function arrayBufferToBase64Chunked(buffer) {
+            const bytes = new Uint8Array(buffer);
+            const chunkSize = 0x8000; // 32KB
+            let result = '';
+            
+            for (let i = 0; i < bytes.length; i += chunkSize) {
+                const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
+                result += btoa(String.fromCharCode(...chunk));
+            }
+            
+            return result;
+        }
+
+        // QRコードデータサイズ計算
+        function calculateQRDataSize(chunkSize) {
+            // 短縮形式のJSON構造
+            const testData = {
+                t: 1, // type
+                i: 999, // index (最大3桁)
+                d: "x".repeat(chunkSize) // data
+            };
+            return JSON.stringify(testData).length;
+        }
+
+        // チャンクサイズ変更時の警告
+        document.getElementById('chunkSize').addEventListener('input', function(e) {
+            const size = parseInt(e.target.value);
+            const dataSize = calculateQRDataSize(size);
+            const sizeDisplay = document.getElementById('qrSizeDisplay');
+            
+            if (sizeDisplay) {
+                sizeDisplay.textContent = `QRコードデータサイズ: 約${dataSize}バイト`;
+                if (dataSize > 600) {
+                    sizeDisplay.className = 'qr-size-display warning';
+                    sizeDisplay.textContent += ' ⚠️ 読み取りが困難になる可能性があります';
+                } else {
+                    sizeDisplay.className = 'qr-size-display';
+                }
+            }
+        });
 
         // デバッグログ追加
         function addDebugLog(message, type = 'info') {
@@ -559,21 +637,7 @@
             }
         }
 
-        // Base64エンコード用のヘルパー関数（大きなファイルに対応）
-        function arrayBufferToBase64(buffer) {
-            let binary = '';
-            const bytes = new Uint8Array(buffer);
-            const chunkSize = 0x8000; // 32KB chunks
-            
-            for (let i = 0; i < bytes.length; i += chunkSize) {
-                const chunk = bytes.subarray(i, i + chunkSize);
-                binary += String.fromCharCode.apply(null, chunk);
-            }
-            
-            return btoa(binary);
-        }
-
-        // ファイル選択処理
+        // ファイル選択処理（ストリーミング対応）
         document.getElementById('fileInput').addEventListener('change', async function(e) {
             const file = e.target.files[0];
             if (!file) return;
@@ -594,132 +658,171 @@
             document.querySelector('#sendSection .progress').style.display = 'block';
             const progressBar = document.getElementById('sendProgress');
             progressBar.style.width = '0%';
-            progressBar.textContent = 'ファイル読み込み中...';
+            progressBar.textContent = 'ファイル処理中...';
 
-            const reader = new FileReader();
-            reader.onload = async function(e) {
-                try {
-                    const arrayBuffer = e.target.result;
-                    const uint8Array = new Uint8Array(arrayBuffer);
-                    
-                    // 圧縮設定確認
-                    const useCompression = document.getElementById('useCompression').checked;
-                    let processedData;
-                    
-                    progressBar.style.width = '30%';
-                    progressBar.textContent = '圧縮処理中...';
-                    
-                    // 非同期で圧縮処理を実行
-                    await new Promise((resolve) => {
-                        setTimeout(() => {
-                            if (useCompression) {
-                                // 大きなファイルの場合は圧縮レベルを調整
-                                const compressionLevel = file.size > 5 * 1024 * 1024 ? 1 : 6; // 5MB以上は高速圧縮
-                                processedData = pako.deflate(uint8Array, { level: compressionLevel });
-                                isCompressed = true;
-                            } else {
-                                processedData = uint8Array;
-                                isCompressed = false;
-                            }
-                            resolve();
-                        }, 10);
-                    });
-                    
-                    progressBar.style.width = '60%';
-                    progressBar.textContent = 'Base64エンコード中...';
-                    
-                    // Base64エンコード（改善版）
-                    const base64Data = await new Promise((resolve) => {
-                        setTimeout(() => {
-                            const result = arrayBufferToBase64(processedData);
-                            resolve(result);
-                        }, 10);
-                    });
-                    
-                    fileData = {
-                        name: file.name,
-                        type: file.type,
-                        data: base64Data,
-                        compressed: isCompressed,
-                        originalSize: file.size,
-                        compressedSize: processedData.length
-                    };
-                    
-                    progressBar.style.width = '90%';
-                    progressBar.textContent = 'チャンク分割中...';
-                    
-                    // チャンクに分割
-                    await new Promise((resolve) => {
-                        setTimeout(() => {
-                            const chunkSize = parseInt(document.getElementById('chunkSize').value);
-                            chunks = [];
-                            const dataLength = fileData.data.length;
-                            for (let i = 0; i < dataLength; i += chunkSize) {
-                                chunks.push(fileData.data.substr(i, chunkSize));
-                            }
-                            resolve();
-                        }, 10);
-                    });
+            try {
+                // ストリーミング処理
+                const processedData = await processFileStreaming(file, (progress, message) => {
+                    progressBar.style.width = progress + '%';
+                    progressBar.textContent = message;
+                });
 
-                    // ファイル情報表示
-                    document.getElementById('compressedSize').textContent = formatFileSize(processedData.length);
-                    document.getElementById('chunkCount').textContent = chunks.length;
-                    document.querySelector('.start-btn').style.display = 'inline-block';
-                    
-                    // チャンクグリッド初期化
-                    initChunkGrid('send', chunks.length);
-                    // ここから追加 ↓
-                    // ヘッダーQRコードを初期表示
-                    const headerData = JSON.stringify({
-                        type: 'header',
-                        fileName: fileData.name,
-                        fileType: fileData.type,
-                        compressed: fileData.compressed,
-                        totalChunks: chunks.length,
-                        timestamp: Date.now()
-                    });
-                    
-                    document.getElementById('qrcode').innerHTML = '';
-                    new QRCode(document.getElementById('qrcode'), {
-                        text: headerData,
-                        width: 256,
-                        height: 256,
-                        correctLevel: QRCode.CorrectLevel.L
-                    });
-                    
-                    document.getElementById('currentChunk').textContent = 'ヘッダー情報（待機中）';
-                    document.getElementById('currentChunkInfo').style.display = 'block';
-                                        
-                    progressBar.style.width = '100%';
-                    progressBar.textContent = '準備完了！';
-                    document.getElementById('sendStatus').textContent = '✅ 準備完了 - 送信開始を押してください';
-                    document.getElementById('sendStatus').className = 'status-message status-complete';
-                    
-                    // 3秒後にプログレスバーを隠す
-                    setTimeout(() => {
-                        document.querySelector('#sendSection .progress').style.display = 'none';
-                    }, 3000);
-                    
-                } catch (error) {
-                    console.error('ファイル処理エラー:', error);
-                    alert('ファイルの処理中にエラーが発生しました: ' + error.message);
-                    progressBar.style.width = '0%';
-                    progressBar.textContent = 'エラー';
-                    document.getElementById('sendStatus').textContent = '❌ エラーが発生しました';
-                    document.getElementById('sendStatus').className = 'status-message status-waiting';
-                }
-            };
-            
-            reader.onerror = function() {
-                alert('ファイルの読み込みに失敗しました');
+                fileData = processedData;
+                
+                // ファイル情報表示
+                document.getElementById('compressedSize').textContent = formatFileSize(fileData.compressedSize);
+                document.getElementById('chunkCount').textContent = chunks.length;
+                
+                // 推定転送時間
+                const sendSpeed = parseInt(document.getElementById('sendSpeed').value);
+                const estimatedSeconds = Math.ceil((chunks.length * sendSpeed) / 1000);
+                document.getElementById('estimatedTime').textContent = formatTime(estimatedSeconds);
+                
+                document.querySelector('.start-btn').style.display = 'inline-block';
+                
+                // チャンクグリッド初期化
+                initChunkGrid('send', chunks.length);
+                
+                // ヘッダーQRコードを初期表示
+                displayHeaderQR();
+                
+                progressBar.style.width = '100%';
+                progressBar.textContent = '準備完了！';
+                document.getElementById('sendStatus').textContent = '✅ 準備完了 - 送信開始を押してください';
+                document.getElementById('sendStatus').className = 'status-message status-complete';
+                
+                // 3秒後にプログレスバーを隠す
+                setTimeout(() => {
+                    document.querySelector('#sendSection .progress').style.display = 'none';
+                }, 3000);
+                
+            } catch (error) {
+                console.error('ファイル処理エラー:', error);
+                alert('ファイルの処理中にエラーが発生しました: ' + error.message);
                 progressBar.style.width = '0%';
                 progressBar.textContent = 'エラー';
-                document.getElementById('sendStatus').textContent = '❌ ファイル読み込みエラー';
-                document.getElementById('sendStatus').className = 'status-message status-waiting';
-            };
-            
-            reader.readAsArrayBuffer(file);
+                document.getElementById('sendStatus').textContent = '❌ エラーが発生しました';
+                document.getElementById('sendStatus').className = 'status-message status-error';
+            }
         });
+
+        // ストリーミング処理でファイルを処理
+        async function processFileStreaming(file, onProgress) {
+            const useCompression = document.getElementById('useCompression').checked;
+            const chunkSize = parseInt(document.getElementById('chunkSize').value);
+            
+            let processedChunks = [];
+            let totalProcessedSize = 0;
+            
+            // 小さいファイルは一括処理
+            if (file.size < STREAM_CHUNK_SIZE) {
+                onProgress(30, '圧縮処理中...');
+                const arrayBuffer = await file.arrayBuffer();
+                const uint8Array = new Uint8Array(arrayBuffer);
+                
+                let processedData;
+                if (useCompression) {
+                    processedData = pako.deflate(uint8Array, { level: 6 });
+                } else {
+                    processedData = uint8Array;
+                }
+                
+                onProgress(60, 'Base64エンコード中...');
+                const base64Data = arrayBufferToBase64Chunked(processedData);
+                
+                onProgress(90, 'チャンク分割中...');
+                chunks = [];
+                for (let i = 0; i < base64Data.length; i += chunkSize) {
+                    chunks.push(base64Data.substr(i, chunkSize));
+                }
+                
+                return {
+                    name: file.name,
+                    type: file.type,
+                    data: base64Data,
+                    compressed: useCompression,
+                    originalSize: file.size,
+                    compressedSize: processedData.length
+                };
+            }
+            
+            // 大きいファイルはストリーミング処理
+            const totalChunks = Math.ceil(file.size / STREAM_CHUNK_SIZE);
+            let compressedParts = [];
+            
+            for (let i = 0; i < totalChunks; i++) {
+                const start = i * STREAM_CHUNK_SIZE;
+                const end = Math.min(start + STREAM_CHUNK_SIZE, file.size);
+                const progress = Math.round((i / totalChunks) * 70);
+                
+                onProgress(progress, `処理中... (${i + 1}/${totalChunks})`);
+                
+                // ファイルの一部を読み込み
+                const slice = file.slice(start, end);
+                const arrayBuffer = await slice.arrayBuffer();
+                const uint8Array = new Uint8Array(arrayBuffer);
+                
+                // 圧縮
+                if (useCompression) {
+                    const compressed = pako.deflate(uint8Array, { level: 1 }); // 大容量は高速圧縮
+                    compressedParts.push(compressed);
+                    totalProcessedSize += compressed.length;
+                } else {
+                    compressedParts.push(uint8Array);
+                    totalProcessedSize += uint8Array.length;
+                }
+            }
+            
+            onProgress(80, 'Base64エンコード中...');
+            
+            // 結合とBase64エンコード
+            const totalArray = new Uint8Array(totalProcessedSize);
+            let offset = 0;
+            for (const part of compressedParts) {
+                totalArray.set(part, offset);
+                offset += part.length;
+            }
+            
+            const base64Data = arrayBufferToBase64Chunked(totalArray);
+            
+            onProgress(90, 'チャンク分割中...');
+            chunks = [];
+            for (let i = 0; i < base64Data.length; i += chunkSize) {
+                chunks.push(base64Data.substr(i, chunkSize));
+            }
+            
+            return {
+                name: file.name,
+                type: file.type,
+                data: base64Data,
+                compressed: useCompression,
+                originalSize: file.size,
+                compressedSize: totalProcessedSize
+            };
+        }
+
+        // ヘッダーQRコード表示
+        function displayHeaderQR() {
+            const headerData = JSON.stringify({
+                t: 0, // type: 0 = header
+                n: fileData.name, // name
+                f: fileData.type, // fileType
+                c: fileData.compressed ? 1 : 0, // compressed
+                tc: chunks.length, // totalChunks
+                ts: Date.now() // timestamp
+            });
+            
+            document.getElementById('qrcode').innerHTML = '';
+            new QRCode(document.getElementById('qrcode'), {
+                text: headerData,
+                width: 400,
+                height: 400,
+                correctLevel: QRCode.CorrectLevel.L
+            });
+            
+            document.getElementById('currentChunk').textContent = 'ヘッダー情報（待機中）';
+            document.getElementById('currentChunkInfo').style.display = 'block';
+        }
 
         // チャンクグリッド初期化
         function initChunkGrid(mode, totalChunks) {
@@ -728,12 +831,24 @@
             grid.innerHTML = '';
             grid.style.display = 'grid';
             
-            for (let i = 0; i < totalChunks; i++) {
+            // 表示するチャンク数を制限（パフォーマンスのため）
+            const maxDisplay = Math.min(totalChunks, 200);
+            
+            for (let i = 0; i < maxDisplay; i++) {
                 const indicator = document.createElement('div');
                 indicator.className = mode === 'receive' ? 'chunk-indicator waiting' : 'chunk-indicator';
                 indicator.textContent = i + 1;
                 indicator.title = `チャンク ${i + 1}`;
                 grid.appendChild(indicator);
+            }
+            
+            if (totalChunks > maxDisplay) {
+                const moreIndicator = document.createElement('div');
+                moreIndicator.style.gridColumn = 'span 3';
+                moreIndicator.style.textAlign = 'center';
+                moreIndicator.style.padding = '10px';
+                moreIndicator.textContent = `... 他 ${totalChunks - maxDisplay} チャンク`;
+                grid.appendChild(moreIndicator);
             }
         }
 
@@ -742,7 +857,7 @@
             const gridId = mode === 'send' ? 'sendChunkGrid' : 'receiveChunkGrid';
             const grid = document.getElementById(gridId);
             const indicators = grid.getElementsByClassName('chunk-indicator');
-            if (indicators[index]) {
+            if (index < indicators.length && indicators[index]) {
                 indicators[index].className = `chunk-indicator ${status}`;
             }
         }
@@ -751,7 +866,16 @@
         function formatFileSize(bytes) {
             if (bytes < 1024) return bytes + ' B';
             else if (bytes < 1048576) return Math.round(bytes / 1024) + ' KB';
-            else return Math.round(bytes / 1048576 * 10) / 10 + ' MB';
+            else if (bytes < 1073741824) return Math.round(bytes / 1048576 * 10) / 10 + ' MB';
+            else return Math.round(bytes / 1073741824 * 10) / 10 + ' GB';
+        }
+
+        // 時間フォーマット
+        function formatTime(seconds) {
+            if (seconds < 60) return seconds + '秒';
+            const minutes = Math.floor(seconds / 60);
+            const remainingSeconds = seconds % 60;
+            return `${minutes}分${remainingSeconds}秒`;
         }
 
         // 送信開始
@@ -760,6 +884,8 @@
 
             currentChunkIndex = -1; // ヘッダーから開始
             cycleCount = 0;
+            transmissionStartTime = Date.now();
+            
             document.querySelector('.start-btn').style.display = 'none';
             document.querySelector('.stop-btn').style.display = 'inline-block';
             document.querySelector('.progress').style.display = 'block';
@@ -801,57 +927,61 @@
             let qrData;
             
             if (currentChunkIndex === -1) {
-                // ヘッダー情報を送信
+                // ヘッダー情報を送信（短縮形式）
                 qrData = JSON.stringify({
-                    type: 'header',
-                    fileName: fileData.name,
-                    fileType: fileData.type,
-                    compressed: fileData.compressed,
-                    totalChunks: chunks.length,
-                    timestamp: Date.now()
+                    t: 0, // type: 0 = header
+                    n: fileData.name, // name
+                    f: fileData.type, // fileType
+                    c: fileData.compressed ? 1 : 0, // compressed
+                    tc: chunks.length, // totalChunks
+                    ts: Date.now() // timestamp
                 });
                 
                 document.getElementById('currentChunk').textContent = 'ヘッダー情報';
                 
                 // 全てのチャンクインジケーターをリセット
-                for (let i = 0; i < chunks.length; i++) {
+                for (let i = 0; i < Math.min(chunks.length, 200); i++) {
                     updateChunkGrid('send', i, '');
                 }
             } else {
-                // データチャンクを送信
+                // データチャンクを送信（短縮形式）
                 qrData = JSON.stringify({
-                    type: 'chunk',
-                    chunkIndex: currentChunkIndex,
-                    data: chunks[currentChunkIndex]
+                    t: 1, // type: 1 = chunk
+                    i: currentChunkIndex, // index
+                    d: chunks[currentChunkIndex] // data
                 });
                 
                 document.getElementById('currentChunk').textContent = `${currentChunkIndex + 1} / ${chunks.length}`;
                 
                 // 現在のチャンクをハイライト
-                for (let i = 0; i < chunks.length; i++) {
+                for (let i = 0; i < Math.min(chunks.length, 200); i++) {
                     updateChunkGrid('send', i, i === currentChunkIndex ? 'current' : '');
                 }
             }
 
-            // QRコード生成前に「生成中」メッセージを表示
+            // QRコード生成
             const qrContainer = document.getElementById('qrcode');
-            qrContainer.innerHTML = '<div style="padding: 50px; color: #666;">QRコード生成中...</div>';
+            qrContainer.innerHTML = '';
             
-            // 非同期でQRコード生成
-            setTimeout(() => {
-                qrContainer.innerHTML = '';
-                qrCode = new QRCode(qrContainer, {
-                    text: qrData,
-                    width: 256,
-                    height: 256,
-                    correctLevel: QRCode.CorrectLevel.L
-                });
+            qrCode = new QRCode(qrContainer, {
+                text: qrData,
+                width: 400,
+                height: 400,
+                correctLevel: QRCode.CorrectLevel.L
+            });
 
-                // プログレスバー更新（ヘッダーは0%として扱う）
-                const progress = currentChunkIndex === -1 ? 0 : Math.round((currentChunkIndex + 1) / chunks.length * 100);
-                document.getElementById('sendProgress').style.width = progress + '%';
-                document.getElementById('sendProgress').textContent = progress + '%';
-            }, 10);
+            // プログレスバー更新
+            const progress = currentChunkIndex === -1 ? 0 : Math.round((currentChunkIndex + 1) / chunks.length * 100);
+            document.getElementById('sendProgress').style.width = progress + '%';
+            document.getElementById('sendProgress').textContent = progress + '%';
+            
+            // 転送速度計算
+            if (transmissionStartTime && currentChunkIndex > 0) {
+                const elapsedSeconds = (Date.now() - transmissionStartTime) / 1000;
+                const bytesTransferred = currentChunkIndex * parseInt(document.getElementById('chunkSize').value);
+                const bytesPerSecond = bytesTransferred / elapsedSeconds;
+                document.getElementById('transferSpeed').textContent = formatFileSize(bytesPerSecond) + '/秒';
+            }
         }
 
         // スキャン開始
@@ -869,7 +999,6 @@
             
             video = document.getElementById('video');
             canvasElement = document.getElementById('canvas');
-            // willReadFrequently属性を設定してパフォーマンスを最適化
             canvas = canvasElement.getContext('2d', { willReadFrequently: true });
             scanning = true;
             headerReceived = false;
@@ -885,6 +1014,9 @@
             document.getElementById('receiveStatus').textContent = '🔍 QRコードを探しています...';
             document.getElementById('receiveStatus').className = 'status-message status-waiting';
             document.getElementById('scanIndicator').className = 'scan-indicator scanning';
+
+            // 経過時間表示開始
+            elapsedTimeInterval = setInterval(updateElapsedTime, 1000);
 
             addDebugLog('カメラアクセスを要求', 'info');
             
@@ -927,9 +1059,21 @@
             if (video && video.srcObject) {
                 video.srcObject.getTracks().forEach(track => track.stop());
             }
+            if (elapsedTimeInterval) {
+                clearInterval(elapsedTimeInterval);
+                elapsedTimeInterval = null;
+            }
             document.querySelector('#receiveSection .start-btn').style.display = 'inline-block';
             document.querySelector('#receiveSection .stop-btn').style.display = 'none';
             document.getElementById('scanIndicator').className = 'scan-indicator';
+        }
+
+        // 経過時間更新
+        function updateElapsedTime() {
+            if (receiveStartTime) {
+                const elapsed = Math.floor((Date.now() - receiveStartTime) / 1000);
+                document.getElementById('elapsedTime').textContent = formatTime(elapsed);
+            }
         }
 
         // QRコードスキャン処理
@@ -963,20 +1107,32 @@
                             
                             try {
                                 const data = JSON.parse(code.data);
-                                addDebugLog(`データタイプ: ${data.type}`, 'info');
                                 
-                                if (data.type === 'header') {
-                                    addDebugLog(`ヘッダー受信: ファイル名=${data.fileName}, チャンク数=${data.totalChunks}`, 'success');
-                                    processHeader(data);
-                                } else if (data.type === 'chunk') {
+                                // 短縮形式のデータを処理
+                                if (data.t === 0 || data.type === 'header') {
+                                    // ヘッダー（短縮形式と従来形式の両方に対応）
+                                    const headerData = {
+                                        fileName: data.n || data.fileName,
+                                        fileType: data.f || data.fileType,
+                                        compressed: data.c === 1 || data.compressed,
+                                        totalChunks: data.tc || data.totalChunks
+                                    };
+                                    addDebugLog(`ヘッダー受信: ファイル名=${headerData.fileName}, チャンク数=${headerData.totalChunks}`, 'success');
+                                    processHeader(headerData);
+                                } else if (data.t === 1 || data.type === 'chunk') {
+                                    // チャンク（短縮形式と従来形式の両方に対応）
                                     if (!headerReceived) {
                                         addDebugLog('ヘッダー未受信のためチャンクをスキップ', 'warning');
                                     } else {
-                                        addDebugLog(`チャンク受信: インデックス=${data.chunkIndex}`, 'info');
-                                        processChunk(data);
+                                        const chunkData = {
+                                            chunkIndex: data.i !== undefined ? data.i : data.chunkIndex,
+                                            data: data.d || data.data
+                                        };
+                                        addDebugLog(`チャンク受信: インデックス=${chunkData.chunkIndex}`, 'info');
+                                        processChunk(chunkData);
                                     }
                                 } else {
-                                    addDebugLog(`未知のデータタイプ: ${data.type}`, 'warning');
+                                    addDebugLog(`未知のデータタイプ: ${data.t || data.type}`, 'warning');
                                 }
                             } catch (e) {
                                 addDebugLog(`JSON解析エラー: ${e.message}`, 'error');
@@ -1044,15 +1200,6 @@
             // アニメーション付きで更新
             updateChunkGrid('receive', data.chunkIndex, 'received');
             
-            // 受信したチャンクの番号を点滅させる
-            const indicator = document.querySelector(`#receiveChunkGrid .chunk-indicator:nth-child(${data.chunkIndex + 1})`);
-            if (indicator) {
-                indicator.style.animation = 'none';
-                setTimeout(() => {
-                    indicator.style.animation = 'receivedPulse 0.5s ease-out';
-                }, 10);
-            }
-            
             addDebugLog(`チャンク ${data.chunkIndex + 1}/${totalChunks} を保存`, 'success');
             
             // 進捗更新
@@ -1068,14 +1215,8 @@
             if (receivedCount === totalChunks) {
                 const receiveTime = Math.round((Date.now() - receiveStartTime) / 1000);
                 addDebugLog(`全チャンク受信完了！ 所要時間: ${receiveTime}秒`, 'success');
-                document.getElementById('receiveStatus').textContent = `✅ 受信完了！（${receiveTime}秒）`;
+                document.getElementById('receiveStatus').textContent = `✅ 受信完了！（${formatTime(receiveTime)}）`;
                 document.getElementById('receiveStatus').className = 'status-message status-complete';
-                
-                // 全てのインジケーターを完了状態にする
-                const allIndicators = document.querySelectorAll('#receiveChunkGrid .chunk-indicator');
-                allIndicators.forEach(ind => {
-                    ind.style.animation = 'receivedPulse 0.3s ease-out';
-                });
                 
                 stopScanning();
                 document.getElementById('downloadBtn').style.display = 'inline-block';
@@ -1101,30 +1242,46 @@
         }
 
         // ファイルダウンロード
-        function downloadFile() {
+        async function downloadFile() {
             if (Object.keys(receivedChunks).length !== totalChunks) {
                 alert('ファイルの受信が完了していません');
                 return;
             }
 
             try {
+                // プログレス表示
+                document.getElementById('receiveStatus').textContent = '⏳ ファイルを復元中...';
+                document.getElementById('receiveStatus').className = 'status-message status-sending';
+
                 // チャンクを結合
                 let completeData = '';
                 for (let i = 0; i < totalChunks; i++) {
                     completeData += receivedChunks[i];
                 }
 
-                // Base64デコード
-                const binaryString = atob(completeData);
-                const bytes = new Uint8Array(binaryString.length);
-                for (let i = 0; i < binaryString.length; i++) {
-                    bytes[i] = binaryString.charCodeAt(i);
+                // Base64デコード（チャンク単位）
+                const binaryLength = Math.floor(completeData.length * 3 / 4);
+                const bytes = new Uint8Array(binaryLength);
+                let byteIndex = 0;
+                
+                // 32KB単位でデコード
+                const decodeChunkSize = 32768 * 4; // Base64の32KB分
+                for (let i = 0; i < completeData.length; i += decodeChunkSize) {
+                    const chunk = completeData.substring(i, Math.min(i + decodeChunkSize, completeData.length));
+                    const binaryString = atob(chunk);
+                    for (let j = 0; j < binaryString.length; j++) {
+                        bytes[byteIndex++] = binaryString.charCodeAt(j);
+                    }
                 }
 
+                // 実際のバイト数に調整
+                const finalBytes = bytes.slice(0, byteIndex);
+
                 // 圧縮解除
-                let finalData = bytes;
+                let finalData = finalBytes;
                 if (isCompressed) {
-                    finalData = pako.inflate(bytes);
+                    document.getElementById('receiveStatus').textContent = '⏳ 圧縮解除中...';
+                    finalData = pako.inflate(finalBytes);
                 }
 
                 // Blobを作成してダウンロード
@@ -1138,22 +1295,30 @@
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
 
+                document.getElementById('receiveStatus').textContent = '✅ ダウンロード完了！';
+                document.getElementById('receiveStatus').className = 'status-message status-complete';
+
                 // リセット
-                receivedChunks = {};
-                totalChunks = 0;
-                receivedFileName = '';
-                receivedFileType = '';
-                headerReceived = false;
-                document.getElementById('downloadBtn').style.display = 'none';
-                document.getElementById('receiveProgress').style.width = '0%';
-                document.getElementById('receiveProgress').textContent = '0%';
-                document.getElementById('receiveChunkGrid').innerHTML = '';
-                document.getElementById('receiveChunkGrid').style.display = 'none';
-                document.getElementById('receiveInfo').style.display = 'none';
-                document.getElementById('receiveStatus').style.display = 'none';
+                setTimeout(() => {
+                    receivedChunks = {};
+                    totalChunks = 0;
+                    receivedFileName = '';
+                    receivedFileType = '';
+                    headerReceived = false;
+                    document.getElementById('downloadBtn').style.display = 'none';
+                    document.getElementById('receiveProgress').style.width = '0%';
+                    document.getElementById('receiveProgress').textContent = '0%';
+                    document.getElementById('receiveChunkGrid').innerHTML = '';
+                    document.getElementById('receiveChunkGrid').style.display = 'none';
+                    document.getElementById('receiveInfo').style.display = 'none';
+                    document.getElementById('receiveStatus').style.display = 'none';
+                }, 3000);
+                
             } catch (e) {
                 alert('ファイルのダウンロードに失敗しました: ' + e.message);
                 console.error('ダウンロードエラー:', e);
+                document.getElementById('receiveStatus').textContent = '❌ ダウンロードエラー';
+                document.getElementById('receiveStatus').className = 'status-message status-error';
             }
         }
     </script>
@@ -1171,6 +1336,14 @@
             document.head.appendChild(script);
         } else {
             console.log('jsQRライブラリは正常に読み込まれています');
+        }
+        
+        // 初期表示のQRコードサイズ警告を表示
+        const chunkSize = parseInt(document.getElementById('chunkSize').value);
+        const dataSize = calculateQRDataSize(chunkSize);
+        const sizeDisplay = document.getElementById('qrSizeDisplay');
+        if (sizeDisplay) {
+            sizeDisplay.textContent = `QRコードデータサイズ: 約${dataSize}バイト`;
         }
     });
     </script>
