@@ -1,1118 +1,535 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ハイブリッドQR転送システム - 10KB/画面</title>
-    <!-- QRコード生成ライブラリ -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <!-- 圧縮ライブラリ -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
-    <!-- QRコード読み取りライブラリ -->
-    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 20px;
-            background-color: #f0f0f0;
-        }
-        .container {
-            background-color: white;
-            border-radius: 10px;
-            padding: 30px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        h1 {
-            color: #333;
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        .mode-selector {
-            display: flex;
-            justify-content: center;
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-        .mode-btn {
-            padding: 15px 40px;
-            font-size: 18px;
-            border: 2px solid #007bff;
-            background-color: white;
-            color: #007bff;
-            border-radius: 5px;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-        .mode-btn.active {
-            background-color: #007bff;
-            color: white;
-        }
-        .section {
-            display: none;
-            margin-top: 20px;
-        }
-        .section.active {
-            display: block;
-        }
-        #fileInput {
-            display: none;
-        }
-        .file-label {
-            display: inline-block;
-            padding: 12px 24px;
-            background-color: #28a745;
-            color: white;
-            border-radius: 5px;
-            cursor: pointer;
-            margin-bottom: 20px;
-            font-size: 16px;
-        }
-        .file-label:hover {
-            background-color: #218838;
-        }
-        #qrDisplay {
-            text-align: center;
-            margin: 30px 0;
-        }
-        #hybridDisplay {
-            display: inline-block;
-            background: white;
-            padding: 20px;
-            border: 3px solid #ddd;
-            border-radius: 10px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-            position: relative;
-        }
-        #hybridCanvas {
-            display: block;
-            image-rendering: crisp-edges;
-            image-rendering: pixelated;
-        }
-        #qrcode {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: white;
-            padding: 10px;
-            border: 2px solid #000;
-            border-radius: 5px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.3);
-        }
-        .progress {
-            width: 100%;
-            height: 40px;
-            background-color: #e0e0e0;
-            border-radius: 20px;
-            overflow: hidden;
-            margin: 20px 0;
-            box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
-        }
-        .progress-bar {
-            height: 100%;
-            background: linear-gradient(45deg, #007bff, #0056b3);
-            width: 0%;
-            transition: width 0.3s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-weight: bold;
-            font-size: 16px;
-        }
-        .info {
-            background-color: #f8f9fa;
-            padding: 20px;
-            border-radius: 10px;
-            margin: 15px 0;
-            border-left: 4px solid #007bff;
-        }
-        .info p {
-            margin: 8px 0;
-        }
-        .controls {
-            margin: 30px 0;
-            text-align: center;
-        }
-        .control-btn {
-            padding: 12px 30px;
-            margin: 0 10px;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 16px;
-            transition: all 0.3s;
-        }
-        .start-btn {
-            background-color: #007bff;
-            color: white;
-        }
-        .start-btn:hover {
-            background-color: #0056b3;
-        }
-        .stop-btn {
-            background-color: #dc3545;
-            color: white;
-        }
-        .stop-btn:hover {
-            background-color: #c82333;
-        }
-        .download-btn {
-            background-color: #28a745;
-            color: white;
-            display: none;
-        }
-        .download-btn:hover {
-            background-color: #218838;
-        }
-        .settings {
-            background-color: #f8f9fa;
-            padding: 20px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-        }
-        .setting-item {
-            margin: 15px 0;
-            display: flex;
-            align-items: center;
-            gap: 15px;
-        }
-        .setting-item label {
-            flex: 1;
-            font-weight: 500;
-        }
-        .setting-item input[type="number"] {
-            width: 100px;
-            padding: 8px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            font-size: 16px;
-        }
-        .setting-item select {
-            padding: 8px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            font-size: 16px;
-        }
-        .status-message {
-            text-align: center;
-            font-size: 18px;
-            font-weight: bold;
-            margin: 20px 0;
-            padding: 15px;
-            border-radius: 10px;
-        }
-        .status-sending {
-            background-color: #cfe2ff;
-            color: #084298;
-        }
-        .status-complete {
-            background-color: #d1e7dd;
-            color: #0f5132;
-        }
-        .status-waiting {
-            background-color: #fff3cd;
-            color: #664d03;
-        }
-        .status-error {
-            background-color: #f8d7da;
-            color: #721c24;
-        }
-        .color-info {
-            background: #e3f2fd;
-            padding: 15px;
-            border-radius: 10px;
-            margin: 15px 0;
-            text-align: center;
-        }
-        .color-legend {
-            display: flex;
-            justify-content: center;
-            gap: 20px;
-            margin: 10px 0;
-            flex-wrap: wrap;
-        }
-        .color-item {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            font-size: 14px;
-        }
-        .color-box {
-            width: 24px;
-            height: 24px;
-            border: 1px solid #000;
-            border-radius: 3px;
-        }
-        #videoContainer {
-            position: relative;
-            width: 100%;
-            max-width: 800px;
-            margin: 0 auto;
-        }
-        #video {
-            width: 100%;
-            border: 2px solid #ddd;
-            border-radius: 10px;
-        }
-        #canvas {
-            display: none;
-        }
-        #analysisCanvas {
-            border: 2px solid #007bff;
-            border-radius: 10px;
-            max-width: 100%;
-            margin: 10px auto;
-            display: block;
-        }
-        .scan-info {
-            background: #fff3cd;
-            padding: 15px;
-            border-radius: 10px;
-            margin: 15px 0;
-            border: 1px solid #ffeaa7;
-        }
-        .speed-display {
-            text-align: center;
-            font-size: 24px;
-            font-weight: bold;
-            color: #007bff;
-            margin: 20px 0;
-        }
-        .hybrid-stats {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-            margin: 20px 0;
-        }
-        .stat-card {
-            background: #f8f9fa;
-            padding: 15px;
-            border-radius: 10px;
-            text-align: center;
-        }
-        .stat-card h3 {
-            margin: 0 0 10px 0;
-            color: #495057;
-            font-size: 14px;
-        }
-        .stat-card .value {
-            font-size: 24px;
-            font-weight: bold;
-            color: #007bff;
-        }
-        @media (max-width: 768px) {
-            .container {
-                padding: 20px;
-            }
-            #hybridCanvas {
-                max-width: 100%;
-                height: auto !important;
-            }
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>🚀 ハイブリッドQR転送システム</h1>
-        <p style="text-align: center; color: #6c757d;">最大10KB/画面の超高速転送</p>
-        
-        <div class="mode-selector">
-            <button class="mode-btn active" onclick="setMode('send')">📤 送信モード</button>
-            <button class="mode-btn" onclick="setMode('receive')">📥 受信モード</button>
-        </div>
+/* ======================================================
+   OpenAI Transcriber 主要ロジック
+   ====================================================== */
+/* ---------- 設定値 ---------- */
+const DEBUG = true;
+const MAX_HIST = 10;
+const TOTAL_MS = 7200000; // 2h
 
-        <!-- 送信モード -->
-        <div id="sendSection" class="section active">
-            <h2>ファイル送信</h2>
-            
-            <div class="settings">
-                <h3>⚙️ 転送設定</h3>
-                <div class="setting-item">
-                    <label>転送モード:</label>
-                    <select id="transferMode" onchange="updateTransferMode()">
-                        <option value="standard">標準QR（～2KB/画面）</option>
-                        <option value="hybrid" selected>ハイブリッド（～10KB/画面）</option>
-                    </select>
-                </div>
-                <div class="setting-item">
-                    <label>カラーグリッドサイズ:</label>
-                    <select id="gridSize">
-                        <option value="40">40×40（6.4KB）</option>
-                        <option value="50" selected>50×50（10KB）</option>
-                        <option value="60">60×60（14.4KB）</option>
-                    </select>
-                </div>
-                <div class="setting-item">
-                    <label>切り替え速度:</label>
-                    <select id="sendSpeed">
-                        <option value="2000">ゆっくり (2秒)</option>
-                        <option value="1000" selected>標準 (1秒)</option>
-                        <option value="500">高速 (0.5秒)</option>
-                    </select>
-                </div>
-                <div class="setting-item">
-                    <label>使用する色数:</label>
-                    <select id="colorCount">
-                        <option value="4">4色（2ビット/セル）</option>
-                        <option value="8" selected>8色（3ビット/セル）</option>
-                        <option value="16">16色（4ビット/セル）</option>
-                    </select>
-                </div>
-            </div>
+/* ---------- ショートハンド ---------- */
+const $ = q => document.querySelector(q);
+const $$ = q => document.querySelectorAll(q);
+const pad = n => String(n).padStart(2, '0');
+const dbg = (...a) => DEBUG && console.log('[DBG]', ...a);
 
-            <label for="fileInput" class="file-label">📁 ファイルを選択</label>
-            <input type="file" id="fileInput" accept="*/*">
-            
-            <div id="fileInfo" class="info" style="display:none;">
-                <p><strong>📄 ファイル名:</strong> <span id="fileName"></span></p>
-                <p><strong>📊 ファイルサイズ:</strong> <span id="fileSize"></span></p>
-                <p><strong>📦 画面数:</strong> <span id="screenCount"></span></p>
-                <p><strong>⏱️ 推定転送時間:</strong> <span id="estimatedTime"></span></p>
-            </div>
+/* ======================================================
+   スライドプロンプト関数（直前300文字）
+   ====================================================== */
+function buildPrompt(maxLen = 300) {
+  const buf = [];
+  let total = 0;
+  for (let i = segs.length - 1; i >= 0; i--) {
+    const txt = segs[i]?.text || '';
+    if (!txt) continue;
+    if (total + txt.length > maxLen) {
+      buf.unshift(txt.slice(txt.length - (maxLen - total)));
+      break;
+    }
+    buf.unshift(txt);
+    total += txt.length;
+    if (total === maxLen) break;
+  }
+  return buf.join('');
+}
 
-            <div class="controls">
-                <button class="control-btn start-btn" onclick="startTransmission()" style="display:none;">▶️ 送信開始</button>
-                <button class="control-btn stop-btn" onclick="stopTransmission()" style="display:none;">⏹️ 送信停止</button>
-            </div>
+/* ---------- 状態 ---------- */
+let apiKey = localStorage.getItem('oa-key') || '';
+let vadE = null;
+let rec = false;
+let timer, tick, remainMs;
+let segs = [];
+let queue = [];
+let busy = false;
+let currentBlob = null;
+let mediaRec = null;
+let mrChunks = [];
+let db;
 
-            <div id="sendStatus" class="status-message status-waiting" style="display:none;">
-                準備完了 - 送信開始を押してください
-            </div>
+// --- 追加: 多重実行／多重保存を防ぐフラグ ---
+let stopping = false;      // stopRec の二重呼び出し防止
+let savedOnce = false;     // onstop の二重発火防止
+let cancelRec = false;     // キャンセル時は保存しない
+let isManual  = false;     // モード状態（true=manual）
 
-            <div class="color-info" id="colorInfo" style="display:none;">
-                <h4>カラーコード凡例</h4>
-                <div class="color-legend" id="colorLegend"></div>
-                <p style="margin: 10px 0; font-size: 14px;">中央のQRコード：接続情報、周辺のカラーグリッド：実データ</p>
-            </div>
+/* ======================================================
+   モードトグル表示 (auto / manual)
+   ====================================================== */
+document.addEventListener('DOMContentLoaded', () => {
+  const modeTgl   = $('#modeToggle');
+  const modeLabel = $('#modeLabel');
+  if (!modeTgl || !modeLabel) return;
+  const upd = () => {
+    isManual = modeTgl.checked;
+    modeLabel.textContent = isManual ? 'manual' : 'auto';
+  };
+  upd();
+  modeTgl.addEventListener('change', upd);
 
-            <div id="qrDisplay">
-                <div id="hybridDisplay" style="display:none;">
-                    <canvas id="hybridCanvas"></canvas>
-                    <div id="qrcode"></div>
-                </div>
-            </div>
+  /* 一行コピー機能 */
+  const result = $('#result');
+  if (result) {
+    // click や touchstart 両方をハンドリング
+    const copyLine = async e => {
+      // どちらを押しても .msg 全体に遡る
+      const msg = e.target.closest('.msg');
+      if (!msg) return;
+      // タイムスタンプを除き .txt 要素だけコピー
+      const txt = msg.querySelector('.txt')?.innerText || '';
+      await copyToClipboard(txt);                // iOS 対応版
+      msg.classList.add('copied');             // 背景色を変える
+      setTimeout(() => msg.classList.remove('copied'), 800);
+    };
+    result.addEventListener('click', copyLine, { capture: true });
+    result.addEventListener('touchstart', copyLine, { passive: true });
+  }
+});
 
-            <div class="speed-display" id="speedDisplay" style="display:none;">
-                転送速度: <span id="currentSpeed">計算中...</span>
-            </div>
+/* ---------- クリップボード共通関数 ---------- */
+async function copyToClipboard(text){
+  try{
+    if(navigator.clipboard?.writeText){
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  }catch(e){/* fallthrough */ }
+  /* フォールバック（iOS Safari 等）*/
+  const ta=document.createElement('textarea');
+  ta.value=text;
+  ta.style.position='fixed';
+  ta.style.opacity='0';
+  document.body.appendChild(ta);
+  ta.focus(); ta.select();
+  try{ document.execCommand('copy'); }catch{}
+  document.body.removeChild(ta);
+  return true;
+}
 
-            <div class="progress" style="display:none;">
-                <div class="progress-bar" id="sendProgress">0%</div>
-            </div>
+/* 待機ヘルパ：キューが空になるまで待つ */
+const waitQueue = async () => {
+  while (busy || queue.length) await sleep(200);
+};
 
-            <div class="hybrid-stats" id="hybridStats" style="display:none;">
-                <div class="stat-card">
-                    <h3>現在の画面</h3>
-                    <div class="value" id="currentScreen">1</div>
-                </div>
-                <div class="stat-card">
-                    <h3>データ容量/画面</h3>
-                    <div class="value" id="bytesPerScreen">0KB</div>
-                </div>
-                <div class="stat-card">
-                    <h3>実効転送速度</h3>
-                    <div class="value" id="effectiveSpeed">0KB/s</div>
-                </div>
-                <div class="stat-card">
-                    <h3>サイクル数</h3>
-                    <div class="value" id="cycleCount">0</div>
-                </div>
-            </div>
-        </div>
+/* ======================================================
+   ヘッダの録音制御ボタン表示を更新（マイク⇔✅❌）
+   ====================================================== */
+function updateHeaderButtons(){
+  const recBtn  = $('#recordBtn');
+  const finBtn  = $('#finishBtn');
+  const canBtn  = $('#cancelBtn');
+  if (!recBtn || !finBtn || !canBtn) return;
+  recBtn.hidden   = rec;
+  finBtn.hidden   = canBtn.hidden = !rec;
+  recBtn.disabled = rec;
+}
 
-        <!-- 受信モード -->
-        <div id="receiveSection" class="section">
-            <h2>ファイル受信</h2>
-            
-            <div class="scan-info">
-                <h4>📷 ハイブリッドQRコードの読み取り方</h4>
-                <ol style="margin: 10px 0; padding-left: 20px;">
-                    <li>送信側の画面全体がカメラに収まるように調整</li>
-                    <li>中央のQRコードでファイル情報を取得</li>
-                    <li>周辺のカラーパターンから高速データ転送</li>
-                    <li>自動的に次の画面を検出して連続受信</li>
-                </ol>
-            </div>
+/* ======================================================
+   IndexedDB（履歴）
+   ====================================================== */
+async function openDB() {
+  return new Promise((ok, ng) => {
+    const rq = indexedDB.open('whisperDB', 1);
+    rq.onupgradeneeded = e => {
+      const store = e.target.result.createObjectStore('hist', { keyPath: 'time' });
+      store.createIndex('timeIdx', 'time');
+    };
+    rq.onsuccess = e => { db = e.target.result; ok(); };
+    rq.onerror = e => ng(e.target.error);
+  });
+}
+async function getAllHist() {
+  await openDB();
+  return new Promise(r => {
+    const idx = db.transaction('hist', 'readonly').objectStore('hist').index('timeIdx');
+    idx.getAll().onsuccess = e => r(e.target.result.reverse());
+  });
+}
+async function putHist(obj) {
+  await openDB();
+  const store = db.transaction('hist', 'readwrite').objectStore('hist');
+  store.put(obj);
+  store.index('timeIdx').openCursor(null, 'next').onsuccess = e => {
+    const c = e.target.result;
+    if (!c) return;
+    store.count().onsuccess = ev => {
+      if (ev.target.result > MAX_HIST) c.delete();
+    };
+  };
+}
 
-            <div class="controls">
-                <button class="control-btn start-btn" onclick="startScanning()">📷 スキャン開始</button>
-                <button class="control-btn stop-btn" onclick="stopScanning()" style="display:none;">⏹️ スキャン停止</button>
-                <button class="control-btn download-btn" id="downloadBtn" onclick="downloadFile()">💾 ファイルをダウンロード</button>
-            </div>
+/* ======================================================
+   録音制御／Whisper 送信
+   ====================================================== */
+async function startRec() {
+  if (!apiKey) { openModal(); return; }
+  if (!isManual && !vadE) {               // manual では無音検知しない
+    vadE = await vad.MicVAD.new({
+      noise_threshold: 0.15,
+      positiveSpeechThreshold: 0.6,
+      negativeSpeechThreshold: 0.3,
+      onSpeechEnd: arr => handleChunk(arr)
+    });
+  }
+  queue.length = 0; busy = false; $('#player').src = '';
+  rec = true; segs.length = 0; $('#result').innerHTML = '';
+  $('#counter').textContent = '';
+  const stream = vadE?.stream ?? await navigator.mediaDevices.getUserMedia({ audio: true });
+  mediaRec = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
+  mrChunks = [];
+  mediaRec.ondataavailable = e => mrChunks.push(e.data);
+  mediaRec.start();
 
-            <div id="receiveStatus" class="status-message status-waiting" style="display:none;">
-                ハイブリッドQRコードを探しています...
-            </div>
+  if (!isManual) await vadE.start();      // manual では起動しない
+  remainMs = TOTAL_MS;
+  timer = setTimeout(stopRec, remainMs);
+  tick = setInterval(() => { remainMs -= 1000; $('#counter').textContent = `残り ${Math.floor(remainMs/60000)}:${pad((remainMs/1000)%60)}`; }, 1000);
+  updateRecUI();
+}
+function stopRec() {
+  if (stopping) return;   // 多重呼び出しガード
+  stopping = true;
+  savedOnce = false;
 
-            <div id="videoContainer">
-                <video id="video"></video>
-                <canvas id="canvas"></canvas>
-                <canvas id="analysisCanvas" style="display:none;"></canvas>
-            </div>
+  vadE?.pause();
+  vadE?.stream?.getTracks().forEach(t => t.stop());
+  clearTimeout(timer); clearInterval(tick);
+  rec = false; $('#counter').textContent = ''; updateRecUI();
 
-            <div class="progress" style="display:none;">
-                <div class="progress-bar" id="receiveProgress">0%</div>
-            </div>
+  mediaRec.onstop = async () => {
+    if (savedOnce) return; // onstop 二重発火ガード
+    savedOnce = true;
+    currentBlob = new Blob(mrChunks, { type: 'audio/webm' });
 
-            <div id="receiveInfo" class="info" style="display:none;">
-                <p><strong>📄 受信ファイル名:</strong> <span id="receivedFileName"></span></p>
-                <p><strong>📊 受信状況:</strong> <span id="receivedScreens">0</span> / <span id="totalScreens">0</span> 画面</p>
-                <p><strong>📈 受信速度:</strong> <span id="receiveSpeed">計算中...</span></p>
-                <p><strong>⏱️ 経過時間:</strong> <span id="elapsedTime">0秒</span></p>
-            </div>
-        </div>
-    </div>
+    /* ── ここで残りの音声全文を文字起こしへ送信 ── */
+    if (!cancelRec) {
+      const url = URL.createObjectURL(currentBlob);
+      const idx = appendSeg('…文字起こし中…', url, true);
+      enqueue(currentBlob, url, idx);        // 最後の塊を Whisper へ
+      await waitQueue();                     // キュー処理が終わるまで待機
+      await saveHist();                      // 文字起こし反映後に履歴保存
+    } else {
+      // キャンセル時は結果・履歴とも破棄
+      segs.length = 0;
+      $('#result').innerHTML = '';
+      cancelRec = false;
+    }
+    stopping = false;                 // 完了後フラグ解除
+    updateHeaderButtons();            // 停止後にヘッダ復帰
+  };
+  mediaRec.stop();
 
-    <script>
-        // グローバル変数
-        let currentMode = 'send';
-        let fileData = null;
-        let screens = []; // 画面データの配列
-        let currentScreenIndex = 0;
-        let transmissionInterval = null;
-        let cycleCount = 0;
-        let transmissionStartTime = null;
-        
-        // カラーパレット（8色）
-        const COLOR_PALETTE_8 = [
-            '#FFFFFF', // 白 (000)
-            '#FF0000', // 赤 (001)
-            '#00FF00', // 緑 (010)
-            '#0000FF', // 青 (011)
-            '#FFFF00', // 黄 (100)
-            '#FF00FF', // マゼンタ (101)
-            '#00FFFF', // シアン (110)
-            '#000000'  // 黒 (111)
-        ];
-        
-        // カラーパレット（16色）
-        const COLOR_PALETTE_16 = [
-            '#FFFFFF', '#C0C0C0', '#808080', '#000000',
-            '#FF0000', '#800000', '#FFFF00', '#808000',
-            '#00FF00', '#008000', '#00FFFF', '#008080',
-            '#0000FF', '#000080', '#FF00FF', '#800080'
-        ];
-        
-        // 受信用変数
-        let receivedScreens = {};
-        let totalScreens = 0;
-        let receivedFileName = '';
-        let receivedFileType = '';
-        let receiveStartTime = null;
-        let lastReceivedBytes = 0;
-        let scanning = false;
-        let video = null;
-        let canvasElement = null;
-        let canvas = null;
-        let analysisCanvas = null;
-        let analysisCtx = null;
-        
-        // モード切替
-        function setMode(mode) {
-            currentMode = mode;
-            document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('active'));
-            document.querySelectorAll('.section').forEach(section => section.classList.remove('active'));
-            
-            if (mode === 'send') {
-                document.querySelector('.mode-btn:first-child').classList.add('active');
-                document.getElementById('sendSection').classList.add('active');
-                stopScanning();
-            } else {
-                document.querySelector('.mode-btn:last-child').classList.add('active');
-                document.getElementById('receiveSection').classList.add('active');
-                stopTransmission();
-            }
-        }
-        
-        // 転送モード更新
-        function updateTransferMode() {
-            const mode = document.getElementById('transferMode').value;
-            const hybridSettings = document.querySelectorAll('#gridSize, #colorCount').forEach(el => {
-                el.closest('.setting-item').style.display = mode === 'hybrid' ? 'flex' : 'none';
-            });
-        }
-        
-        // ファイル選択処理
-        document.getElementById('fileInput').addEventListener('change', async function(e) {
-            const file = e.target.files[0];
-            if (!file) return;
-            
-            // UI更新
-            document.getElementById('fileInfo').style.display = 'block';
-            document.getElementById('fileName').textContent = file.name;
-            document.getElementById('fileSize').textContent = formatFileSize(file.size);
-            
-            // ファイル読み込み
-            const arrayBuffer = await file.arrayBuffer();
-            const uint8Array = new Uint8Array(arrayBuffer);
-            
-            // 圧縮
-            const compressed = pako.deflate(uint8Array, { level: 6 });
-            const base64Data = arrayBufferToBase64(compressed);
-            
-            fileData = {
-                name: file.name,
-                type: file.type,
-                data: base64Data,
-                originalSize: file.size,
-                compressedSize: compressed.length
-            };
-            
-            // 画面分割
-            prepareScreens();
-            
-            // UI更新
-            document.querySelector('.start-btn').style.display = 'inline-block';
-            document.getElementById('sendStatus').style.display = 'block';
-            document.getElementById('sendStatus').textContent = '✅ 準備完了 - 送信開始を押してください';
-            document.getElementById('sendStatus').className = 'status-message status-complete';
-        });
-        
-        // 画面データ準備
-        function prepareScreens() {
-            screens = [];
-            const mode = document.getElementById('transferMode').value;
-            const gridSize = parseInt(document.getElementById('gridSize').value);
-            const colorCount = parseInt(document.getElementById('colorCount').value);
-            
-            let bytesPerScreen;
-            if (mode === 'hybrid') {
-                // ハイブリッドモード：カラーグリッドの容量計算
-                const bitsPerCell = Math.log2(colorCount);
-                const totalCells = gridSize * gridSize;
-                bytesPerScreen = Math.floor((totalCells * bitsPerCell) / 8);
-            } else {
-                // 標準モード：2000バイト
-                bytesPerScreen = 2000;
-            }
-            
-            // データを画面単位に分割
-            for (let i = 0; i < fileData.data.length; i += bytesPerScreen) {
-                screens.push({
-                    index: screens.length,
-                    data: fileData.data.substr(i, bytesPerScreen)
-                });
-            }
-            
-            // 情報更新
-            document.getElementById('screenCount').textContent = screens.length;
-            const sendSpeed = parseInt(document.getElementById('sendSpeed').value) / 1000;
-            const estimatedTime = screens.length * sendSpeed;
-            document.getElementById('estimatedTime').textContent = formatTime(Math.ceil(estimatedTime));
-            document.getElementById('bytesPerScreen').textContent = (bytesPerScreen / 1024).toFixed(1) + 'KB';
-        }
-        
-        // Base64エンコード
-        function arrayBufferToBase64(buffer) {
-            const bytes = new Uint8Array(buffer);
-            let binary = '';
-            const chunkSize = 0x8000;
-            
-            for (let i = 0; i < bytes.length; i += chunkSize) {
-                const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
-                binary += String.fromCharCode.apply(null, chunk);
-            }
-            
-            return btoa(binary);
-        }
-        
-        // 送信開始
-        function startTransmission() {
-            if (!fileData || screens.length === 0) return;
-            
-            currentScreenIndex = 0;
-            cycleCount = 0;
-            transmissionStartTime = Date.now();
-            
-            // UI更新
-            document.querySelector('.start-btn').style.display = 'none';
-            document.querySelector('.stop-btn').style.display = 'inline-block';
-            document.querySelector('.progress').style.display = 'block';
-            document.getElementById('sendStatus').textContent = '📡 送信中 - 受信側でスキャンしてください';
-            document.getElementById('sendStatus').className = 'status-message status-sending';
-            
-            // ハイブリッドモード用UI
-            if (document.getElementById('transferMode').value === 'hybrid') {
-                document.getElementById('hybridDisplay').style.display = 'inline-block';
-                document.getElementById('colorInfo').style.display = 'block';
-                document.getElementById('hybridStats').style.display = 'grid';
-                document.getElementById('speedDisplay').style.display = 'block';
-                updateColorLegend();
-            }
-            
-            // 最初の画面表示
-            displayScreen();
-            
-            // 連続送信開始
-            const sendSpeed = parseInt(document.getElementById('sendSpeed').value);
-            transmissionInterval = setInterval(displayScreen, sendSpeed);
-        }
-        
-        // 送信停止
-        function stopTransmission() {
-            if (transmissionInterval) {
-                clearInterval(transmissionInterval);
-                transmissionInterval = null;
-            }
-            document.querySelector('.start-btn').style.display = 'inline-block';
-            document.querySelector('.stop-btn').style.display = 'none';
-            document.getElementById('sendStatus').textContent = '⏸️ 送信停止';
-            document.getElementById('sendStatus').className = 'status-message status-waiting';
-        }
-        
-        // 画面表示
-        function displayScreen() {
-            if (currentScreenIndex >= screens.length) {
-                currentScreenIndex = 0;
-                cycleCount++;
-            }
-            
-            const screen = screens[currentScreenIndex];
-            const mode = document.getElementById('transferMode').value;
-            
-            if (mode === 'hybrid') {
-                displayHybridScreen(screen);
-            } else {
-                displayStandardQR(screen);
-            }
-            
-            // 進捗更新
-            const progress = ((currentScreenIndex + 1) / screens.length) * 100;
-            document.getElementById('sendProgress').style.width = progress + '%';
-            document.getElementById('sendProgress').textContent = Math.round(progress) + '%';
-            
-            // 統計更新
-            updateStats();
-            
-            currentScreenIndex++;
-        }
-        
-        // ハイブリッド画面表示
-        function displayHybridScreen(screen) {
-            const gridSize = parseInt(document.getElementById('gridSize').value);
-            const colorCount = parseInt(document.getElementById('colorCount').value);
-            const cellSize = 10;
-            const canvasSize = gridSize * cellSize;
-            
-            // Canvas設定
-            const canvas = document.getElementById('hybridCanvas');
-            canvas.width = canvasSize;
-            canvas.height = canvasSize;
-            const ctx = canvas.getContext('2d');
-            
-            // 背景
-            ctx.fillStyle = '#f0f0f0';
-            ctx.fillRect(0, 0, canvasSize, canvasSize);
-            
-            // データをカラーグリッドに変換
-            const bitsPerCell = Math.log2(colorCount);
-            const colors = colorCount === 16 ? COLOR_PALETTE_16 : COLOR_PALETTE_8;
-            
-            // バイナリ文字列に変換
-            let binaryString = '';
-            for (let i = 0; i < screen.data.length; i++) {
-                const byte = screen.data.charCodeAt(i);
-                binaryString += byte.toString(2).padStart(8, '0');
-            }
-            
-            // グリッドに配置
-            let bitIndex = 0;
-            for (let y = 0; y < gridSize; y++) {
-                for (let x = 0; x < gridSize; x++) {
-                    if (bitIndex + bitsPerCell <= binaryString.length) {
-                        const colorIndex = parseInt(binaryString.substr(bitIndex, bitsPerCell), 2);
-                        ctx.fillStyle = colors[colorIndex];
-                        ctx.fillRect(x * cellSize, y * cellSize, cellSize - 1, cellSize - 1);
-                        bitIndex += bitsPerCell;
-                    }
-                }
-            }
-            
-            // 中央のQRコード（メタデータ）
-            const qrData = JSON.stringify({
-                type: 'hybrid',
-                screen: screen.index,
-                total: screens.length,
-                name: fileData.name,
-                grid: gridSize,
-                colors: colorCount,
-                timestamp: Date.now()
-            });
-            
-            document.getElementById('qrcode').innerHTML = '';
-            new QRCode(document.getElementById('qrcode'), {
-                text: qrData,
-                width: 200,
-                height: 200,
-                correctLevel: QRCode.CorrectLevel.L
-            });
-        }
-        
-        // 標準QR表示
-        function displayStandardQR(screen) {
-            document.getElementById('hybridDisplay').style.display = 'none';
-            document.getElementById('qrcode').style.position = 'static';
-            document.getElementById('qrcode').style.transform = 'none';
-            
-            const qrData = JSON.stringify({
-                type: 'standard',
-                screen: screen.index,
-                total: screens.length,
-                name: fileData.name,
-                data: screen.data
-            });
-            
-            document.getElementById('qrcode').innerHTML = '';
-            new QRCode(document.getElementById('qrcode'), {
-                text: qrData,
-                width: 400,
-                height: 400,
-                correctLevel: QRCode.CorrectLevel.L
-            });
-        }
-        
-        // カラー凡例更新
-        function updateColorLegend() {
-            const colorCount = parseInt(document.getElementById('colorCount').value);
-            const colors = colorCount === 16 ? COLOR_PALETTE_16 : COLOR_PALETTE_8;
-            const legend = document.getElementById('colorLegend');
-            legend.innerHTML = '';
-            
-            for (let i = 0; i < Math.min(colors.length, 8); i++) {
-                const item = document.createElement('div');
-                item.className = 'color-item';
-                item.innerHTML = `
-                    <div class="color-box" style="background: ${colors[i]}"></div>
-                    <span>${i.toString(2).padStart(colorCount === 16 ? 4 : 3, '0')}</span>
-                `;
-                legend.appendChild(item);
-            }
-        }
-        
-        // 統計更新
-        function updateStats() {
-            document.getElementById('currentScreen').textContent = currentScreenIndex + 1;
-            document.getElementById('cycleCount').textContent = cycleCount;
-            
-            if (transmissionStartTime) {
-                const elapsed = (Date.now() - transmissionStartTime) / 1000;
-                const bytesTransferred = currentScreenIndex * screens[0].data.length;
-                const speed = bytesTransferred / elapsed;
-                document.getElementById('effectiveSpeed').textContent = (speed / 1024).toFixed(1) + 'KB/s';
-                document.getElementById('currentSpeed').textContent = (speed / 1024).toFixed(1) + 'KB/秒';
-            }
-        }
-        
-        // スキャン開始
-        function startScanning() {
-            video = document.getElementById('video');
-            canvasElement = document.getElementById('canvas');
-            canvas = canvasElement.getContext('2d');
-            analysisCanvas = document.getElementById('analysisCanvas');
-            analysisCtx = analysisCanvas.getContext('2d');
-            
-            scanning = true;
-            receivedScreens = {};
-            totalScreens = 0;
-            receiveStartTime = Date.now();
-            
-            // UI更新
-            document.querySelector('#receiveSection .start-btn').style.display = 'none';
-            document.querySelector('#receiveSection .stop-btn').style.display = 'inline-block';
-            document.getElementById('receiveStatus').style.display = 'block';
-            document.querySelector('#receiveSection .progress').style.display = 'block';
-            document.getElementById('receiveInfo').style.display = 'block';
-            
-            // カメラ起動
-            navigator.mediaDevices.getUserMedia({ 
-                video: { 
-                    facingMode: 'environment',
-                    width: { ideal: 1920 },
-                    height: { ideal: 1080 }
-                } 
-            })
-            .then(stream => {
-                video.srcObject = stream;
-                video.play();
-                requestAnimationFrame(tick);
-                
-                // 経過時間更新
-                setInterval(updateReceiveStats, 1000);
-            })
-            .catch(err => {
-                console.error('カメラエラー:', err);
-                alert('カメラへのアクセスが拒否されました');
-                stopScanning();
-            });
-        }
-        
-        // スキャン停止
-        function stopScanning() {
-            scanning = false;
-            if (video && video.srcObject) {
-                video.srcObject.getTracks().forEach(track => track.stop());
-            }
-            document.querySelector('#receiveSection .start-btn').style.display = 'inline-block';
-            document.querySelector('#receiveSection .stop-btn').style.display = 'none';
-        }
-        
-        // スキャンループ
-        function tick() {
-            if (!scanning) return;
-            
-            if (video.readyState === video.HAVE_ENOUGH_DATA) {
-                canvasElement.height = video.videoHeight;
-                canvasElement.width = video.videoWidth;
-                canvas.drawImage(video, 0, 0, canvasElement.width, canvasElement.height);
-                
-                const imageData = canvas.getImageData(0, 0, canvasElement.width, canvasElement.height);
-                
-                // QRコード検出
-                const code = jsQR(imageData.data, imageData.width, imageData.height);
-                
-                if (code) {
-                    try {
-                        const data = JSON.parse(code.data);
-                        
-                        if (data.type === 'hybrid') {
-                            // ハイブリッドモード：カラーグリッドも解析
-                            processHybridScreen(data, imageData);
-                        } else if (data.type === 'standard') {
-                            // 標準モード
-                            processStandardScreen(data);
-                        }
-                    } catch (e) {
-                        console.error('解析エラー:', e);
-                    }
-                }
-            }
-            
-            requestAnimationFrame(tick);
-        }
-        
-        // ハイブリッド画面処理
-        function processHybridScreen(metadata, imageData) {
-            if (receivedScreens[metadata.screen]) return; // 既に受信済み
-            
-            // メタデータ保存
-            if (!receivedFileName) {
-                receivedFileName = metadata.name;
-                totalScreens = metadata.total;
-                document.getElementById('receivedFileName').textContent = receivedFileName;
-                document.getElementById('totalScreens').textContent = totalScreens;
-            }
-            
-            // カラーグリッド解析
-            const colorData = analyzeColorGrid(imageData, metadata);
-            if (colorData) {
-                receivedScreens[metadata.screen] = colorData;
-                updateReceiveProgress();
-                
-                // 解析結果を視覚化
-                visualizeAnalysis(imageData, metadata);
-            }
-        }
-        
-        // カラーグリッド解析
-        function analyzeColorGrid(imageData, metadata) {
-            // QRコードの位置を推定（画面中央）
-            const centerX = imageData.width / 2;
-            const centerY = imageData.height / 2;
-            const qrSize = 220; // QRコード + パディング
-            
-            // グリッドのサンプリング
-            const gridSize = metadata.grid;
-            const colors = metadata.colors === 16 ? COLOR_PALETTE_16 : COLOR_PALETTE_8;
-            const bitsPerCell = Math.log2(metadata.colors);
-            
-            // グリッド領域のサイズを推定
-            const gridPixelSize = Math.min(imageData.width, imageData.height) * 0.8;
-            const cellPixelSize = gridPixelSize / gridSize;
-            const startX = (imageData.width - gridPixelSize) / 2;
-            const startY = (imageData.height - gridPixelSize) / 2;
-            
-            let binaryString = '';
-            
-            for (let y = 0; y < gridSize; y++) {
-                for (let x = 0; x < gridSize; x++) {
-                    const px = Math.floor(startX + x * cellPixelSize + cellPixelSize / 2);
-                    const py = Math.floor(startY + y * cellPixelSize + cellPixelSize / 2);
-                    
-                    // 中央のQRコード領域をスキップ
-                    if (Math.abs(px - centerX) < qrSize / 2 && Math.abs(py - centerY) < qrSize / 2) {
-                        continue;
-                    }
-                    
-                    // ピクセルカラーを取得
-                    const index = (py * imageData.width + px) * 4;
-                    const r = imageData.data[index];
-                    const g = imageData.data[index + 1];
-                    const b = imageData.data[index + 2];
-                    
-                    // 最も近い色を判定
-                    const colorIndex = findClosestColor(r, g, b, colors);
-                    binaryString += colorIndex.toString(2).padStart(bitsPerCell, '0');
-                }
-            }
-            
-            // バイナリ文字列をBase64に変換
-            let result = '';
-            for (let i = 0; i < binaryString.length; i += 8) {
-                if (i + 8 <= binaryString.length) {
-                    const byte = parseInt(binaryString.substr(i, 8), 2);
-                    result += String.fromCharCode(byte);
-                }
-            }
-            
-            return result;
-        }
-        
-        // 最も近い色を見つける
-        function findClosestColor(r, g, b, colors) {
-            let minDistance = Infinity;
-            let closestIndex = 0;
-            
-            for (let i = 0; i < colors.length; i++) {
-                const color = colors[i];
-                const cr = parseInt(color.substr(1, 2), 16);
-                const cg = parseInt(color.substr(3, 2), 16);
-                const cb = parseInt(color.substr(5, 2), 16);
-                
-                const distance = Math.sqrt(
-                    Math.pow(r - cr, 2) + 
-                    Math.pow(g - cg, 2) + 
-                    Math.pow(b - cb, 2)
-                );
-                
-                if (distance < minDistance) {
-                    minDistance = distance;
-                    closestIndex = i;
-                }
-            }
-            
-            return closestIndex;
-        }
-        
-        // 解析結果の視覚化
-        function visualizeAnalysis(imageData, metadata) {
-            analysisCanvas.width = 400;
-            analysisCanvas.height = 400;
-            analysisCanvas.style.display = 'block';
-            
-            // 元画像を縮小表示
-            analysisCtx.drawImage(canvasElement, 0, 0, 400, 400);
-            
-            // 検出したグリッドを強調表示
-            analysisCtx.strokeStyle = '#00ff00';
-            analysisCtx.lineWidth = 2;
-            analysisCtx.strokeRect(50, 50, 300, 300);
-            
-            // 中央のQRコード位置
-            analysisCtx.strokeStyle = '#ff0000';
-            analysisCtx.strokeRect(150, 150, 100, 100);
-        }
-        
-        // 標準画面処理
-        function processStandardScreen(data) {
-            if (receivedScreens[data.screen]) return;
-            
-            if (!receivedFileName) {
-                receivedFileName = data.name;
-                totalScreens = data.total;
-                document.getElementById('receivedFileName').textContent = receivedFileName;
-                document.getElementById('totalScreens').textContent = totalScreens;
-            }
-            
-            receivedScreens[data.screen] = data.data;
-            updateReceiveProgress();
-        }
-        
-        // 受信進捗更新
-        function updateReceiveProgress() {
-            const received = Object.keys(receivedScreens).length;
-            const progress = (received / totalScreens) * 100;
-            
-            document.getElementById('receiveProgress').style.width = progress + '%';
-            document.getElementById('receiveProgress').textContent = Math.round(progress) + '%';
-            document.getElementById('receivedScreens').textContent = received;
-            
-            if (received === totalScreens) {
-                document.getElementById('receiveStatus').textContent = '✅ 受信完了！';
-                document.getElementById('receiveStatus').className = 'status-message status-complete';
-                stopScanning();
-                document.getElementById('downloadBtn').style.display = 'inline-block';
-            }
-        }
-        
-        // 受信統計更新
-        function updateReceiveStats() {
-            if (!receiveStartTime) return;
-            
-            const elapsed = Math.floor((Date.now() - receiveStartTime) / 1000);
-            document.getElementById('elapsedTime').textContent = formatTime(elapsed);
-            
-            const receivedBytes = Object.values(receivedScreens).join('').length;
-            const speed = receivedBytes / elapsed;
-            document.getElementById('receiveSpeed').textContent = (speed / 1024).toFixed(1) + 'KB/秒';
-        }
-        
-        // ファイルダウンロード
-        function downloadFile() {
-            // 画面を順番に結合
-            let completeData = '';
-            for (let i = 0; i < totalScreens; i++) {
-                completeData += receivedScreens[i] || '';
-            }
-            
-            // Base64デコード
-            const binaryString = atob(completeData);
-            const bytes = new Uint8Array(binaryString.length);
-            for (let i = 0; i < binaryString.length; i++) {
-                bytes[i] = binaryString.charCodeAt(i);
-            }
-            
-            // 圧縮解除
-            const decompressed = pako.inflate(bytes);
-            
-            // ダウンロード
-            const blob = new Blob([decompressed]);
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = receivedFileName;
-            a.click();
-            URL.revokeObjectURL(url);
-            
-            // リセット
-            receivedScreens = {};
-            totalScreens = 0;
-            receivedFileName = '';
-            document.getElementById('downloadBtn').style.display = 'none';
-            document.getElementById('receiveStatus').style.display = 'none';
-            document.getElementById('receiveInfo').style.display = 'none';
-            analysisCanvas.style.display = 'none';
-        }
-        
-        // ユーティリティ関数
-        function formatFileSize(bytes) {
-            if (bytes < 1024) return bytes + ' B';
-            else if (bytes < 1048576) return Math.round(bytes / 1024) + ' KB';
-            else if (bytes < 1073741824) return Math.round(bytes / 1048576 * 10) / 10 + ' MB';
-            else return Math.round(bytes / 1073741824 * 10) / 10 + ' GB';
-        }
-        
-        function formatTime(seconds) {
-            if (seconds < 60) return seconds + '秒';
-            const minutes = Math.floor(seconds / 60);
-            const remainingSeconds = seconds % 60;
-            return `${minutes}分${remainingSeconds}秒`;
-        }
-        
-        // 初期化
-        updateTransferMode();
-    </script>
-</body>
-</html>
+  // VAD のリセット: 次回録音時に新しいインスタンスを生成
+  vadE = null;
+}
+
+async function handleChunk(arr) {
+  if (isManual) return;           // manual モードではスキップ
+  const blob = new Blob([vad.utils.encodeWAV(arr)], { type: 'audio/wav' });
+  const dataUrl = await blobToDataURL(blob);
+  const idx = appendSeg('…文字起こし中…', dataUrl, true);
+  enqueue(blob, dataUrl, idx);
+}
+
+function enqueue(file, url, segIdx) {
+  queue.push({ file, url, segIdx }); // enqueue with explicit fname below
+  if (!busy) processQueue();
+}
+async function processQueue() {
+  if (busy) return; busy = true;
+  const WAIT = 10, COOL = 300;
+  while (queue.length) {
+    const job = queue.shift();
+    try {
+      const fd = new FormData();
+      const fname = job.file.type.includes('wav') ? 'audio.wav' : 'audio.webm';
+      fd.append('file', job.file, fname);           // ファイル名を明示 ★
+      fd.append('model', 'whisper-1');
+      fd.append('language', 'ja');
+      /* ← ここで直近300文字の文脈を添付 */
+      fd.append('prompt', buildPrompt());
+      const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+        method: 'POST', headers: { Authorization: `Bearer ${apiKey}` }, body: fd
+      });
+      if (res.status === 429) {
+        const w = +(res.headers.get('Retry-After') || WAIT);
+        job.backoff = Math.min((job.backoff||w)*2, 60);
+        queue.unshift(job);
+        await sleep(w*1000);
+        continue;
+      }
+      if (!res.ok) throw new Error(res.status);
+      const js = await res.json();
+      replaceSeg(job.segIdx, js.text||'(無音)');
+    } catch(e) {
+      console.error(e);
+      replaceSeg(job.segIdx, '【エラー】');
+    }
+    await sleep(COOL);
+  }
+  busy = false;
+}
+
+/* ======================================================
+   新規セッション（文字起こしメニューで呼び出し）
+   ====================================================== */
+function newSession(){
+  if (rec) stopRec();          // 録音中なら停止
+  segs.length = 0;
+  queue.length = 0;
+  $('#result').innerHTML = '';
+  $('#player').src = '';
+  currentBlob = null;
+  cancelRec = false;
+  updateRecUI();
+}
+
+/* ======================================================
+   UI ヘルパ
+   ====================================================== */
+function appendSeg(text, audio, loading=false) {
+  const d = new Date(), ts=`${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  const idx = segs.push({ ts, text, audio }) - 1;
+  const div = document.createElement('div'); div.className = 'msg'; div.dataset.idx = idx;
+  div.innerHTML = `<span class="ts">${ts}</span><div class="txt">${text}</div>`;
+  div.onclick = () => playAudio(idx);
+  $('#result').append(div);
+  if (!loading) $('#result').scrollTop = $('#result').scrollHeight;
+  return idx;
+}
+function replaceSeg(i, text) {
+  if (i<0||i>=segs.length) return;
+  segs[i].text = text;
+  $(`#result .msg[data-idx="${i}"] .txt`).textContent = text;
+}
+function playAudio(idx) { const a = segs[idx]?.audio; if (!a) return; const pl = $('#player'); pl.dataset.idx = idx; pl.src = a; pl.play(); }
+function updateRecUI() {
+  const item = $('[data-act="record"]');
+  item.querySelector('span').textContent = rec ? '停止' : '文字起こし';
+  $('#toggle').classList.toggle('rec-on', rec);
+  item.classList.toggle('rec-on', rec);
+  updateHeaderButtons();                        // アイコン同期
+}
+
+async function proofread() {
+  if (!apiKey) { openModal(); return; }
+
+  // segs 配列を [ts] text 形式にまとめる
+  const lines = segs.map(s => `[${s.ts}] ${s.text}`).join('\n');
+  if (!lines.trim()) { alert('文字起こし結果がありません'); return; }
+
+  const btn = $('[data-act="proofread"]');
+  btn.classList.add('active');
+
+  try {
+    const body = {
+      model: 'gpt-4o-mini',
+      temperature: 0,
+      messages: [
+        {
+          role: 'system',
+          content:
+            `あなたは日本語の文字起こし校正アシスタントです。
+前後の文脈を考慮し、誤認識された単語を正しい語に置き換えます。
+タイムスタンプ([HH:MM:SS])は変更せず、次の JSON 配列だけを返してください。
+例:
+[
+  {"ts":"00:00:01","text":"修正後の文"},
+  ...
+]`
+        },
+        { role: 'user', content: lines }
+      ]
+    };
+
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify(body)
+    });
+
+    const reply = (await res.json()).choices?.[0]?.message?.content || '[]';
+    let arr;
+    try {
+      arr = JSON.parse(reply);          // GPT が純粋な JSON を返した場合
+    } catch {
+      // 万一 ```json … ``` で返ってきた場合でも括弧内を抜き出す
+      const m = reply.match(/\[([\s\S]*)\]/);
+      arr = m ? JSON.parse(`[
+${m[1]}
+]`) : [];
+    }
+
+    // segs と DOM を更新
+    arr.forEach(({ ts, text }) => {
+      const i = segs.findIndex(s => s.ts === ts);
+      if (i !== -1 && text) replaceSeg(i, text.trim());
+    });
+
+  } catch (e) {
+    console.error(e);
+    alert('校正失敗');
+  } finally {
+    btn.classList.remove('active');
+  }
+}
+
+function dispatch(act) {
+  $$('.menu-item').forEach(m => m.classList.remove('active'));
+  $(`[data-act="${act}"]`).classList.add('active');
+  switch(act) {
+    case 'record':
+      if (rec) stopRec(); else newSession();
+      break;
+    case 'proofread': proofread(); break;
+    case 'download': copyText(); break;
+    case 'audio': downloadAudio(); break;
+    case 'settings': openModal(); break;
+  }
+}
+function bindUI() {
+  $$('.menu-item').forEach(el=> el.onclick = ()=>{dispatch(el.dataset.act); closeSidebar();});
+  $('#toggle').onclick = toggleSidebar;
+  $('#backdrop').onclick = toggleSidebar;
+  $('#saveKey').onclick = ()=>{ apiKey=$('#apiKey').value.trim(); localStorage.setItem('oa-key',apiKey); closeModal(); };
+  $('#clearAll').onclick = ()=>{ if(confirm('全履歴を削除しますか？')) clearHist(); };
+  $('#player').addEventListener('ended',()=>{
+    const cur = +($('#player').dataset.idx||-1), next = cur+1;
+    if (next<segs.length) playAudio(next);
+  });
+}
+
+async function init() {
+  await openDB();
+  await drawHist();
+  const first = $('#histList .hist'); first?.click();
+  if (!apiKey) openModal();
+  bindUI();
+}
+init();
+
+// ------- DOMContentLoaded で UI 要素を安全に取得 -------
+document.addEventListener('DOMContentLoaded', () => {
+  /* ==== ページリロード時に完全初期化 ==== */
+  newSession();                               // 画面／配列／Queue をクリア
+  $('#result').scrollTop = 0;
+  updateHeaderButtons();                      // ヘッダ状態を初期化
+
+  const recordBtn = document.getElementById('recordBtn');
+  const finishBtn = document.getElementById('finishBtn');
+  const cancelBtn = document.getElementById('cancelBtn');
+
+  /* ── サイドバー「文字起こし」 ── */
+  document.querySelector('[data-act="record"]')
+    ?.addEventListener('click', () => newSession());
+
+  /* ── ヘッダ録音制御 ── */
+  recordBtn?.addEventListener('click', () => { rec ? stopRec() : startRec(); updateHeaderButtons(); });
+  finishBtn?.addEventListener('click', () => { if (rec) stopRec(); updateHeaderButtons(); });
+  cancelBtn?.addEventListener('click', () => { if (rec) { cancelRec=true; stopRec(); } updateHeaderButtons(); });
+
+  updateHeaderButtons();   // 初期描画
+});
+
+// 小さなユーティリティ
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const blobToDataURL = blob => new Promise(r=>{ const fr=new FileReader(); fr.onload=()=>r(fr.result); fr.readAsDataURL(blob); });
+
+// 履歴表示
+async function drawHist() {
+  const list = $('#histList');
+  list.innerHTML = '';
+  const all = await getAllHist();
+  all.forEach(h => {
+    const li = document.createElement('li');
+    li.className = 'hist';
+    li.dataset.time = h.time;
+    const span = document.createElement('span');
+    span.textContent = new Date(h.time).toLocaleString();
+    const btn = document.createElement('button');
+    btn.className = 'btnDel';
+    btn.innerHTML = '<i class="fa-solid fa-trash"></i>';
+    btn.onclick = e => { e.stopPropagation(); deleteHist(h.time); };
+    li.append(span, btn);
+    li.onclick = () => loadHist(h);
+    list.append(li);
+  });
+}
+
+// 保存
+async function saveHist() {
+  const h = { time: Date.now(), segs, audio: URL.createObjectURL(currentBlob) };
+  await putHist(h);
+  await drawHist();
+}
+
+// 全履歴削除
+async function clearHist() {
+  await openDB();
+  const tx = db.transaction('hist', 'readwrite');
+  tx.objectStore('hist').clear();
+  await tx.complete;
+  await drawHist();
+}
+
+// 個別削除
+async function deleteHist(time) {
+  await openDB();
+  const tx = db.transaction('hist', 'readwrite');
+  tx.objectStore('hist').delete(time);
+  await tx.complete;
+  await drawHist();
+}
+
+// 履歴読み込み
+function loadHist(h) {
+  // 表示領域を完全にクリアしてから選択履歴をそのまま描画
+  $('#result').innerHTML = '';
+  segs = h.segs;                         // 配列は参照だけ差し替え、push しない
+  h.segs.forEach((s, i) => {            // 既存データを DOM に描画
+    const div = document.createElement('div');
+    div.className = 'msg';
+    div.dataset.idx = i;
+    div.innerHTML = `<span class="ts">${s.ts}</span><div class="txt">${s.text}</div>`;
+    div.onclick = () => playAudio(i);
+    $('#result').append(div);
+  });
+  // サイドバーの選択状態を更新
+  $$('.hist').forEach(el =>
+    el.classList.toggle('selected', +el.dataset.time === h.time)
+  );
+}
+
+// コピー
+function copyText() {
+  const txt = $('#result').innerText;
+  copyToClipboard(txt);
+}
+
+// 音声DL
+function downloadAudio() {
+  if (!currentBlob) return;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(currentBlob);
+  a.download = 'recording.webm';
+  a.click();
+}
+
+// モーダル
+function openModal() { $('#modal').classList.add('open'); }
+function closeModal(){ $('#modal').classList.remove('open'); }
+
+// サイドバー
+function toggleSidebar() {
+  const sb = $('#sidebar');
+  if (window.innerWidth <= 768) {
+    sb.classList.toggle('open');
+    $('#backdrop').classList.toggle('show');
+  } else {
+    sb.classList.toggle('collapsed');
+  }
+}
+function closeSidebar() {
+  if (window.innerWidth <= 768) {
+    $('#sidebar').classList.remove('open');
+    $('#backdrop').classList.remove('show');
+  }
+}
