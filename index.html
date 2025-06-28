@@ -856,12 +856,14 @@
                 totalChunks: chunks.length
             });
             
+            console.log('初期ヘッダーデータ:', headerData);
+            
             const cell = document.getElementById('qr-cell-0');
             cell.innerHTML = '';
             
             const header = document.createElement('div');
             header.className = 'qr-cell-header';
-            header.textContent = 'PAGE 0';
+            header.textContent = 'PAGE 0 (HEADER)';
             cell.appendChild(header);
             
             const qrDiv = document.createElement('div');
@@ -951,37 +953,68 @@
                 
                 const chunkIndex = startIndex + i;
                 
-                if (pageIndex === 0 && i === 0) {
-                    // ヘッダー（ページ0）
+                // 左上セル（i === 0）の処理を最優先
+                if (i === 0) {
+                    // ページ0の左上: ヘッダー情報
+                    if (pageIndex === 0) {
+                        const header = document.createElement('div');
+                        header.className = 'qr-cell-header';
+                        header.textContent = 'PAGE 0 (HEADER)';
+                        cell.appendChild(header);
+                        
+                        const qrDiv = document.createElement('div');
+                        cell.appendChild(qrDiv);
+                        
+                        const headerData = JSON.stringify({
+                            type: 'header',
+                            pageNumber: 0,
+                            totalPages: totalPages,
+                            fileName: fileData.name,
+                            fileType: fileData.type,
+                            compressed: fileData.compressed,
+                            totalChunks: chunks.length
+                        });
+                        
+                        console.log('ヘッダーQR生成:', headerData);
+                        
+                        new QRCode(qrDiv, {
+                            text: headerData,
+                            width: 200,
+                            height: 200,
+                            correctLevel: QRCode.CorrectLevel.M
+                        });
+                    } 
+                    // ページ1以降の左上: ページ番号情報
+                    else {
+                        const header = document.createElement('div');
+                        header.className = 'qr-cell-header';
+                        header.textContent = `PAGE ${pageIndex}`;
+                        cell.appendChild(header);
+                        
+                        const qrDiv = document.createElement('div');
+                        cell.appendChild(qrDiv);
+                        
+                        const pageData = JSON.stringify({
+                            type: 'page',
+                            pageNumber: pageIndex,
+                            totalPages: totalPages
+                        });
+                        
+                        console.log(`ページ${pageIndex}のQR生成:`, pageData);
+                        
+                        new QRCode(qrDiv, {
+                            text: pageData,
+                            width: 200,
+                            height: 200,
+                            correctLevel: QRCode.CorrectLevel.M
+                        });
+                    }
+                }
+                // 左上以外のセル: データチャンク
+                else if (chunkIndex >= 0 && chunkIndex < chunks.length) {
                     const header = document.createElement('div');
                     header.className = 'qr-cell-header';
-                    header.textContent = 'PAGE 0';
-                    cell.appendChild(header);
-                    
-                    const qrDiv = document.createElement('div');
-                    cell.appendChild(qrDiv);
-                    
-                    const headerData = JSON.stringify({
-                        type: 'header',
-                        pageNumber: 0,
-                        totalPages: totalPages,
-                        fileName: fileData.name,
-                        fileType: fileData.type,
-                        compressed: fileData.compressed,
-                        totalChunks: chunks.length
-                    });
-                    
-                    new QRCode(qrDiv, {
-                        text: headerData,
-                        width: 200,
-                        height: 200,
-                        correctLevel: QRCode.CorrectLevel.M
-                    });
-                } else if (chunkIndex >= 0 && chunkIndex < chunks.length) {
-                    // データチャンク
-                    const header = document.createElement('div');
-                    header.className = 'qr-cell-header';
-                    header.textContent = (i === 0) ? `PAGE ${pageIndex}` : `#${chunkIndex + 1}`;
+                    header.textContent = `#${chunkIndex + 1}`;
                     cell.appendChild(header);
                     
                     const qrDiv = document.createElement('div');
@@ -996,28 +1029,6 @@
                     
                     new QRCode(qrDiv, {
                         text: chunkData,
-                        width: 200,
-                        height: 200,
-                        correctLevel: QRCode.CorrectLevel.M
-                    });
-                } else if (i === 0 && pageIndex > 0) {
-                    // 各ページの左上にページ番号QR
-                    const header = document.createElement('div');
-                    header.className = 'qr-cell-header';
-                    header.textContent = `PAGE ${pageIndex}`;
-                    cell.appendChild(header);
-                    
-                    const qrDiv = document.createElement('div');
-                    cell.appendChild(qrDiv);
-                    
-                    const pageData = JSON.stringify({
-                        type: 'page',
-                        pageNumber: pageIndex,
-                        totalPages: totalPages
-                    });
-                    
-                    new QRCode(qrDiv, {
-                        text: pageData,
                         width: 200,
                         height: 200,
                         correctLevel: QRCode.CorrectLevel.M
@@ -1108,26 +1119,30 @@
                 if (code && code.data) {
                     // QRコードの内容が変わったかチェック
                     if (lastQRContent !== code.data) {
-                        console.log('QRコード変化検知:', code.data.substring(0, 50) + '...');
+                        console.log('QRコード変化検知:', code.data.substring(0, 100) + '...');
                         lastQRContent = code.data;
                         
                         try {
                             const qrData = JSON.parse(code.data);
+                            console.log('QRデータ解析結果:', qrData);
                             
                             // ヘッダーから総ページ数を取得
                             if (qrData.type === 'header' && qrData.totalPages) {
                                 expectedTotalPages = qrData.totalPages;
                                 document.getElementById('expectedPages').textContent = expectedTotalPages;
                                 updatePageStatusDisplay();
+                                console.log(`総ページ数: ${expectedTotalPages}`);
                             }
                             
-                            // ページ番号を記録
+                            // ページ番号を記録（header, page, chunkすべてにpageNumberが含まれる）
                             if (qrData.pageNumber !== undefined) {
                                 const pageNum = qrData.pageNumber;
+                                console.log(`ページ番号検出: ${pageNum}`);
                                 
                                 // まだ撮影していないページなら撮影
                                 if (!capturedPages.has(pageNum)) {
                                     const delay = parseInt(document.getElementById('captureDelay').value);
+                                    console.log(`${delay}ms後に撮影実行`);
                                     
                                     setTimeout(() => {
                                         captureImage(pageNum);
@@ -1147,12 +1162,12 @@
                                 }
                             }
                         } catch (e) {
-                            // JSON解析エラーは無視
+                            console.error('JSON解析エラー:', e);
                         }
                     }
                 }
             } catch (e) {
-                // QRコード読み取りエラーは無視
+                // QRコード読み取りエラーは無視（頻繁に発生するため）
             }
         }
 
