@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QRコード3×3グリッド転送システム - Azure版</title>
+    <title>QRコード3×3グリッド転送システム - 改善版</title>
     <!-- QRコード生成ライブラリ -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <!-- 圧縮ライブラリ -->
@@ -75,6 +75,64 @@
         }
         #fileInput {
             display: none;
+        }
+        
+        /* 送信モード切替 */
+        .transmission-mode {
+            display: flex;
+            gap: 15px;
+            margin: 20px 0;
+            align-items: center;
+        }
+        .transmission-mode label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            padding: 10px 15px;
+            border: 2px solid #e5e5e7;
+            border-radius: 10px;
+            transition: all 0.3s;
+        }
+        .transmission-mode input[type="radio"]:checked + label {
+            border-color: #007aff;
+            background-color: #e3f2fd;
+        }
+        
+        /* ページ選択UI */
+        .page-selector {
+            background-color: #f5f5f7;
+            padding: 20px;
+            border-radius: 12px;
+            margin: 20px 0;
+            display: none;
+        }
+        .page-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+            gap: 10px;
+            margin-top: 15px;
+        }
+        .page-checkbox {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 10px;
+            border: 2px solid #d1d1d6;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 600;
+        }
+        .page-checkbox.selected {
+            background-color: #007aff;
+            color: white;
+            border-color: #007aff;
+        }
+        .page-checkbox.captured {
+            background-color: #34c759;
+            color: white;
+            border-color: #34c759;
         }
         
         /* QRコードグリッド */
@@ -173,6 +231,44 @@
             0% { opacity: 1; }
             50% { opacity: 0.6; }
             100% { opacity: 1; }
+        }
+        
+        /* 撮影進捗表示 */
+        .capture-progress {
+            background-color: #f5f5f7;
+            padding: 20px;
+            border-radius: 12px;
+            margin: 20px 0;
+            display: none;
+        }
+        .capture-progress h3 {
+            margin-top: 0;
+            color: #1d1d1f;
+        }
+        .page-status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(50px, 1fr));
+            gap: 8px;
+            margin-top: 15px;
+        }
+        .page-status {
+            padding: 8px;
+            text-align: center;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            border: 2px solid #e5e5e7;
+            background-color: white;
+        }
+        .page-status.captured {
+            background-color: #34c759;
+            color: white;
+            border-color: #34c759;
+        }
+        .page-status.pending {
+            background-color: #ff9500;
+            color: white;
+            border-color: #ff9500;
         }
         
         .captured-images {
@@ -403,6 +499,30 @@
                 <p><strong>📦 総ページ数:</strong> <span id="totalPages"></span></p>
             </div>
 
+            <!-- 送信モード選択 -->
+            <div class="transmission-mode" id="transmissionMode" style="display:none;">
+                <input type="radio" name="transMode" id="modeAll" value="all" checked>
+                <label for="modeAll">
+                    🔄 全ページ連続送信
+                </label>
+                <input type="radio" name="transMode" id="modeSelected" value="selected">
+                <label for="modeSelected">
+                    📌 特定ページ送信
+                </label>
+            </div>
+
+            <!-- ページ選択UI -->
+            <div class="page-selector" id="pageSelector">
+                <h3>📄 送信ページ選択</h3>
+                <p>送信したいページを選択してください（緑色 = 撮影済み）</p>
+                <div class="page-grid" id="pageGrid"></div>
+                <div style="margin-top: 15px;">
+                    <button class="control-btn" onclick="selectAllPages()">すべて選択</button>
+                    <button class="control-btn" onclick="selectUncapturedPages()">未撮影のみ選択</button>
+                    <button class="control-btn" onclick="clearPageSelection()">選択クリア</button>
+                </div>
+            </div>
+
             <div style="text-align: center; margin: 20px 0;">
                 <button class="control-btn start-btn" onclick="startTransmission()" style="display:none;">▶️ 送信開始</button>
                 <button class="control-btn stop-btn" onclick="stopTransmission()" style="display:none;">⏹️ 送信停止</button>
@@ -423,6 +543,7 @@
             <div class="info" id="pageInfo" style="display:none;">
                 <p><strong>📄 現在のページ:</strong> <span id="currentPage">0</span> / <span id="totalPagesDisplay">0</span></p>
                 <p><strong>🔄 サイクル数:</strong> <span id="cycleCount">0</span></p>
+                <p><strong>✅ 撮影済みページ:</strong> <span id="capturedPagesCount">0</span> / <span id="totalPagesCount2">0</span></p>
             </div>
         </div>
 
@@ -435,10 +556,6 @@
                 <div class="setting-item">
                     <label>QR変化検知後の待機時間 (ミリ秒):</label>
                     <input type="number" id="captureDelay" value="300" min="100" max="1000" step="100">
-                </div>
-                <div class="setting-item">
-                    <label>最大撮影枚数:</label>
-                    <input type="number" id="maxCaptures" value="30" min="5" max="50">
                 </div>
             </div>
             
@@ -475,6 +592,13 @@
                 </div>
             </div>
 
+            <!-- 撮影進捗表示 -->
+            <div class="capture-progress" id="captureProgress">
+                <h3>📊 撮影進捗</h3>
+                <p>総ページ数: <span id="expectedPages">-</span> | 撮影済み: <span id="capturedPagesDisplay">0</span></p>
+                <div class="page-status-grid" id="pageStatusGrid"></div>
+            </div>
+
             <div class="captured-images" id="capturedImages"></div>
 
             <div class="progress" id="processProgress" style="display:none;">
@@ -498,6 +622,11 @@
         let currentPage = 0;
         let transmissionInterval = null;
         let cycleCount = 0;
+        let selectedPages = new Set();
+        let capturedPagesInfo = new Set(); // 受信側から送られてきた撮影済みページ情報
+        let transmissionMode = 'all';
+        let pagesToTransmit = [];
+        let currentTransmitIndex = 0;
         
         // 受信側変数
         let capturedImages = [];
@@ -508,6 +637,8 @@
         let isMonitoring = false;
         let lastQRContent = null;
         let monitoringIntervalId = null;
+        let capturedPages = new Set(); // 撮影済みページ番号
+        let expectedTotalPages = 0;
         
         // Azure設定（テスト用）
         const AZURE_ENDPOINT = 'https://azure-document-intelligence-2.cognitiveservices.azure.com/';
@@ -516,6 +647,18 @@
         // 初期化
         window.addEventListener('DOMContentLoaded', () => {
             initQRGrid();
+            
+            // 送信モード切替リスナー
+            document.querySelectorAll('input[name="transMode"]').forEach(radio => {
+                radio.addEventListener('change', (e) => {
+                    transmissionMode = e.target.value;
+                    if (transmissionMode === 'selected') {
+                        document.getElementById('pageSelector').style.display = 'block';
+                    } else {
+                        document.getElementById('pageSelector').style.display = 'none';
+                    }
+                });
+            });
         });
 
         // モード切替
@@ -589,14 +732,95 @@
                 
                 document.getElementById('chunkCount').textContent = chunks.length;
                 document.getElementById('totalPages').textContent = totalPages;
+                document.getElementById('totalPagesCount2').textContent = totalPages;
                 document.getElementById('sendStatus').style.display = 'block';
+                document.getElementById('transmissionMode').style.display = 'flex';
                 document.querySelector('.start-btn').style.display = 'inline-block';
                 
+                // ページ選択UIを初期化
+                initPageSelector(totalPages);
+                
                 displayInitialPage();
+                
+                // 撮影済みページ情報をリセット
+                capturedPagesInfo.clear();
+                updateCapturedPagesDisplay();
             };
             
             reader.readAsArrayBuffer(file);
         });
+
+        // ページ選択UI初期化
+        function initPageSelector(totalPages) {
+            const grid = document.getElementById('pageGrid');
+            grid.innerHTML = '';
+            selectedPages.clear();
+            
+            for (let i = 0; i < totalPages; i++) {
+                const div = document.createElement('div');
+                div.className = 'page-checkbox';
+                div.textContent = i + 1;
+                div.dataset.page = i;
+                div.onclick = () => togglePageSelection(i);
+                grid.appendChild(div);
+            }
+        }
+
+        // ページ選択トグル
+        function togglePageSelection(pageIndex) {
+            const elem = document.querySelector(`[data-page="${pageIndex}"]`);
+            if (selectedPages.has(pageIndex)) {
+                selectedPages.delete(pageIndex);
+                elem.classList.remove('selected');
+            } else {
+                selectedPages.add(pageIndex);
+                elem.classList.add('selected');
+            }
+        }
+
+        // 全ページ選択
+        function selectAllPages() {
+            const totalPages = Math.ceil((chunks.length + 1) / 9);
+            for (let i = 0; i < totalPages; i++) {
+                selectedPages.add(i);
+                document.querySelector(`[data-page="${i}"]`)?.classList.add('selected');
+            }
+        }
+
+        // 未撮影ページのみ選択
+        function selectUncapturedPages() {
+            const totalPages = Math.ceil((chunks.length + 1) / 9);
+            selectedPages.clear();
+            document.querySelectorAll('.page-checkbox').forEach(elem => elem.classList.remove('selected'));
+            
+            for (let i = 0; i < totalPages; i++) {
+                if (!capturedPagesInfo.has(i)) {
+                    selectedPages.add(i);
+                    document.querySelector(`[data-page="${i}"]`)?.classList.add('selected');
+                }
+            }
+        }
+
+        // 選択クリア
+        function clearPageSelection() {
+            selectedPages.clear();
+            document.querySelectorAll('.page-checkbox').forEach(elem => elem.classList.remove('selected'));
+        }
+
+        // 撮影済みページ表示更新
+        function updateCapturedPagesDisplay() {
+            document.getElementById('capturedPagesCount').textContent = capturedPagesInfo.size;
+            
+            // ページ選択UIで撮影済みページを緑色に
+            document.querySelectorAll('.page-checkbox').forEach(elem => {
+                const pageIndex = parseInt(elem.dataset.page);
+                if (capturedPagesInfo.has(pageIndex)) {
+                    elem.classList.add('captured');
+                } else {
+                    elem.classList.remove('captured');
+                }
+            });
+        }
 
         // Base64エンコード
         function arrayBufferToBase64(buffer) {
@@ -621,8 +845,11 @@
 
         // 初期ページ表示
         function displayInitialPage() {
+            const totalPages = Math.ceil((chunks.length + 1) / 9);
             const headerData = JSON.stringify({
                 type: 'header',
+                pageNumber: 0,
+                totalPages: totalPages,
                 fileName: fileData.name,
                 fileType: fileData.type,
                 compressed: fileData.compressed,
@@ -634,7 +861,7 @@
             
             const header = document.createElement('div');
             header.className = 'qr-cell-header';
-            header.textContent = 'HEADER';
+            header.textContent = 'PAGE 0';
             cell.appendChild(header);
             
             const qrDiv = document.createElement('div');
@@ -656,8 +883,24 @@
         function startTransmission() {
             if (!fileData) return;
             
-            currentPage = 0;
             cycleCount = 0;
+            currentTransmitIndex = 0;
+            
+            // 送信するページリストを準備
+            if (transmissionMode === 'selected' && selectedPages.size > 0) {
+                pagesToTransmit = Array.from(selectedPages).sort((a, b) => a - b);
+            } else {
+                const totalPages = Math.ceil((chunks.length + 1) / 9);
+                pagesToTransmit = Array.from({length: totalPages}, (_, i) => i);
+            }
+            
+            if (pagesToTransmit.length === 0) {
+                alert('送信するページを選択してください');
+                return;
+            }
+            
+            currentPage = pagesToTransmit[0];
+            
             document.querySelector('.start-btn').style.display = 'none';
             document.querySelector('.stop-btn').style.display = 'inline-block';
             document.querySelector('.progress').style.display = 'block';
@@ -669,15 +912,15 @@
             
             const sendSpeed = parseInt(document.getElementById('sendSpeed').value);
             transmissionInterval = setInterval(() => {
-                currentPage++;
-                const totalPages = Math.ceil((chunks.length + 1) / 9);
+                currentTransmitIndex++;
                 
-                if (currentPage >= totalPages) {
-                    currentPage = 0;
+                if (currentTransmitIndex >= pagesToTransmit.length) {
+                    currentTransmitIndex = 0;
                     cycleCount++;
                     document.getElementById('cycleCount').textContent = cycleCount;
                 }
                 
+                currentPage = pagesToTransmit[currentTransmitIndex];
                 displayPage(currentPage);
             }, sendSpeed);
         }
@@ -709,10 +952,10 @@
                 const chunkIndex = startIndex + i;
                 
                 if (pageIndex === 0 && i === 0) {
-                    // ヘッダー
+                    // ヘッダー（ページ0）
                     const header = document.createElement('div');
                     header.className = 'qr-cell-header';
-                    header.textContent = 'HEADER';
+                    header.textContent = 'PAGE 0';
                     cell.appendChild(header);
                     
                     const qrDiv = document.createElement('div');
@@ -720,6 +963,8 @@
                     
                     const headerData = JSON.stringify({
                         type: 'header',
+                        pageNumber: 0,
+                        totalPages: totalPages,
                         fileName: fileData.name,
                         fileType: fileData.type,
                         compressed: fileData.compressed,
@@ -736,7 +981,7 @@
                     // データチャンク
                     const header = document.createElement('div');
                     header.className = 'qr-cell-header';
-                    header.textContent = `#${chunkIndex + 1}`;
+                    header.textContent = (i === 0) ? `PAGE ${pageIndex}` : `#${chunkIndex + 1}`;
                     cell.appendChild(header);
                     
                     const qrDiv = document.createElement('div');
@@ -744,6 +989,7 @@
                     
                     const chunkData = JSON.stringify({
                         type: 'chunk',
+                        pageNumber: pageIndex,
                         chunkIndex: chunkIndex,
                         data: chunks[chunkIndex]
                     });
@@ -754,18 +1000,43 @@
                         height: 200,
                         correctLevel: QRCode.CorrectLevel.M
                     });
+                } else if (i === 0 && pageIndex > 0) {
+                    // 各ページの左上にページ番号QR
+                    const header = document.createElement('div');
+                    header.className = 'qr-cell-header';
+                    header.textContent = `PAGE ${pageIndex}`;
+                    cell.appendChild(header);
+                    
+                    const qrDiv = document.createElement('div');
+                    cell.appendChild(qrDiv);
+                    
+                    const pageData = JSON.stringify({
+                        type: 'page',
+                        pageNumber: pageIndex,
+                        totalPages: totalPages
+                    });
+                    
+                    new QRCode(qrDiv, {
+                        text: pageData,
+                        width: 200,
+                        height: 200,
+                        correctLevel: QRCode.CorrectLevel.M
+                    });
                 }
             }
             
             // 進捗更新
-            const progress = Math.round((pageIndex + 1) / totalPages * 100);
+            const progress = Math.round((currentTransmitIndex + 1) / pagesToTransmit.length * 100);
             document.getElementById('sendProgress').style.width = progress + '%';
         }
 
         // 自動撮影開始
         async function startAutoCapture() {
             capturedImages = [];
+            capturedPages.clear();
+            expectedTotalPages = 0;
             updateCapturedImagesDisplay();
+            updatePageStatusDisplay();
             lastQRContent = null;
             
             document.getElementById('captureStatus').style.display = 'block';
@@ -840,18 +1111,44 @@
                         console.log('QRコード変化検知:', code.data.substring(0, 50) + '...');
                         lastQRContent = code.data;
                         
-                        // 変化検知後の待機時間
-                        const delay = parseInt(document.getElementById('captureDelay').value);
-                        
-                        setTimeout(() => {
-                            const maxCaptures = parseInt(document.getElementById('maxCaptures').value);
-                            if (capturedImages.length < maxCaptures) {
-                                captureImage();
-                                document.getElementById('captureStatus').textContent = `📸 QR変化を検知！撮影 (${capturedImages.length + 1}/${maxCaptures}枚)`;
-                            } else {
-                                stopAutoCapture();
+                        try {
+                            const qrData = JSON.parse(code.data);
+                            
+                            // ヘッダーから総ページ数を取得
+                            if (qrData.type === 'header' && qrData.totalPages) {
+                                expectedTotalPages = qrData.totalPages;
+                                document.getElementById('expectedPages').textContent = expectedTotalPages;
+                                updatePageStatusDisplay();
                             }
-                        }, delay);
+                            
+                            // ページ番号を記録
+                            if (qrData.pageNumber !== undefined) {
+                                const pageNum = qrData.pageNumber;
+                                
+                                // まだ撮影していないページなら撮影
+                                if (!capturedPages.has(pageNum)) {
+                                    const delay = parseInt(document.getElementById('captureDelay').value);
+                                    
+                                    setTimeout(() => {
+                                        captureImage(pageNum);
+                                        document.getElementById('captureStatus').textContent = 
+                                            `📸 ページ ${pageNum + 1} を撮影！（${capturedPages.size}/${expectedTotalPages}ページ）`;
+                                        
+                                        // 全ページ撮影完了チェック
+                                        if (expectedTotalPages > 0 && capturedPages.size >= expectedTotalPages) {
+                                            document.getElementById('captureStatus').textContent = 
+                                                '✅ 全ページの撮影が完了しました！';
+                                            document.getElementById('captureStatus').className = 'status-message status-success';
+                                            stopAutoCapture();
+                                        }
+                                    }, delay);
+                                } else {
+                                    console.log(`ページ ${pageNum} は既に撮影済み`);
+                                }
+                            }
+                        } catch (e) {
+                            // JSON解析エラーは無視
+                        }
                     }
                 }
             } catch (e) {
@@ -860,7 +1157,7 @@
         }
 
         // 撮影実行
-        function captureImage() {
+        function captureImage(pageNumber) {
             const video = document.getElementById('video');
             const canvas = document.getElementById('captureCanvas');
             const ctx = canvas.getContext('2d');
@@ -874,9 +1171,15 @@
             
             // キャンバスからBlobを生成
             canvas.toBlob((blob) => {
-                capturedImages.push(blob);
+                capturedImages.push({
+                    blob: blob,
+                    pageNumber: pageNumber
+                });
+                capturedPages.add(pageNumber);
                 updateCapturedImagesDisplay();
+                updatePageStatusDisplay();
                 document.getElementById('capturedCount').textContent = capturedImages.length;
+                document.getElementById('capturedPagesDisplay').textContent = capturedPages.size;
                 
                 // 撮影インジケーターをフラッシュ
                 const indicator = document.getElementById('captureIndicator');
@@ -886,7 +1189,43 @@
                     indicator.textContent = '👀 監視中';
                     indicator.style.backgroundColor = 'rgba(255, 59, 48, 0.9)';
                 }, 300);
+                
+                // 送信側に撮影済みページ情報を送る（仮想的に）
+                sendCapturedPageInfo(pageNumber);
             }, 'image/jpeg', 0.9);
+        }
+
+        // ページステータス表示更新
+        function updatePageStatusDisplay() {
+            if (expectedTotalPages === 0) return;
+            
+            document.getElementById('captureProgress').style.display = 'block';
+            const grid = document.getElementById('pageStatusGrid');
+            grid.innerHTML = '';
+            
+            for (let i = 0; i < expectedTotalPages; i++) {
+                const div = document.createElement('div');
+                div.className = 'page-status';
+                div.textContent = i + 1;
+                
+                if (capturedPages.has(i)) {
+                    div.classList.add('captured');
+                } else {
+                    div.classList.add('pending');
+                }
+                
+                grid.appendChild(div);
+            }
+        }
+
+        // 撮影済みページ情報を送信側に送る（シミュレーション）
+        function sendCapturedPageInfo(pageNumber) {
+            // 実際のアプリケーションでは、WebSocketやWebRTCなどで送信側に通知
+            // ここではグローバル変数で共有（同一ページ内でのシミュレーション）
+            if (currentMode === 'receive') {
+                capturedPagesInfo.add(pageNumber);
+                updateCapturedPagesDisplay();
+            }
         }
 
         // 自動撮影停止
@@ -911,8 +1250,17 @@
             
             if (capturedImages.length > 0) {
                 document.getElementById('processBtn').style.display = 'inline-block';
-                document.getElementById('captureStatus').textContent = `✅ ${capturedImages.length}枚の写真を撮影しました`;
-                document.getElementById('captureStatus').className = 'status-message status-success';
+                if (expectedTotalPages > 0 && capturedPages.size < expectedTotalPages) {
+                    const missing = [];
+                    for (let i = 0; i < expectedTotalPages; i++) {
+                        if (!capturedPages.has(i)) {
+                            missing.push(i + 1);
+                        }
+                    }
+                    document.getElementById('captureStatus').textContent = 
+                        `⚠️ 未撮影ページ: ${missing.join(', ')}`;
+                    document.getElementById('captureStatus').className = 'status-message status-error';
+                }
             }
         }
 
@@ -921,17 +1269,20 @@
             const container = document.getElementById('capturedImages');
             container.innerHTML = '';
             
-            capturedImages.forEach((blob, index) => {
+            // ページ番号でソート
+            const sortedImages = [...capturedImages].sort((a, b) => a.pageNumber - b.pageNumber);
+            
+            sortedImages.forEach((item, index) => {
                 const div = document.createElement('div');
                 div.className = 'captured-image';
                 
                 const img = document.createElement('img');
-                img.src = URL.createObjectURL(blob);
+                img.src = URL.createObjectURL(item.blob);
                 div.appendChild(img);
                 
                 const number = document.createElement('div');
                 number.className = 'captured-image-number';
-                number.textContent = `#${index + 1}`;
+                number.textContent = `Page ${item.pageNumber + 1}`;
                 div.appendChild(number);
                 
                 container.appendChild(div);
@@ -998,7 +1349,7 @@
                 
                 try {
                     // 画像をリサイズ
-                    const resizedBlob = await resizeImage(capturedImages[i]);
+                    const resizedBlob = await resizeImage(capturedImages[i].blob);
                     
                     // Azure APIを呼び出し
                     const results = await analyzeImageWithAzure(resizedBlob);
@@ -1170,15 +1521,19 @@
                 
                 // リセット
                 capturedImages = [];
+                capturedPages.clear();
                 updateCapturedImagesDisplay();
+                updatePageStatusDisplay();
                 receivedChunksData = {};
                 receivedFileInfo = null;
                 totalChunksCount = 0;
+                expectedTotalPages = 0;
                 document.getElementById('downloadBtn').style.display = 'none';
                 document.getElementById('processBtn').style.display = 'none';
                 document.getElementById('receiveInfo').style.display = 'none';
                 document.getElementById('processProgress').style.display = 'none';
                 document.getElementById('captureStatus').style.display = 'none';
+                document.getElementById('captureProgress').style.display = 'none';
                 
             } catch (error) {
                 alert('ダウンロードエラー: ' + error.message);
