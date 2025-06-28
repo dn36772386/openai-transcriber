@@ -134,35 +134,42 @@
         }
         
         /* 受信側スタイル */
-        .capture-container {
-            max-width: 600px;
-            margin: 0 auto;
+        #videoContainer {
+            position: relative;
+            max-width: 800px;
+            margin: 0 auto 20px;
+            border-radius: 12px;
+            overflow: hidden;
+            background-color: #000;
         }
         
-        .capture-btn {
+        #video {
             width: 100%;
-            padding: 20px;
-            font-size: 20px;
-            font-weight: 600;
-            background-color: #007aff;
+            height: auto;
+            display: block;
+        }
+        
+        #captureCanvas {
+            display: none;
+        }
+        
+        .capture-indicator {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            padding: 8px 16px;
+            background-color: rgba(255, 59, 48, 0.9);
             color: white;
-            border: none;
-            border-radius: 16px;
-            cursor: pointer;
-            margin: 20px 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 14px;
+            animation: pulse 1s infinite;
         }
         
-        .capture-btn:hover {
-            background-color: #0051d5;
-        }
-        
-        .capture-btn:disabled {
-            background-color: #c7c7cc;
-            cursor: not-allowed;
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.6; }
+            100% { opacity: 1; }
         }
         
         .captured-images {
@@ -196,23 +203,6 @@
             border-radius: 6px;
             font-size: 12px;
             font-weight: 600;
-        }
-        
-        .remove-image-btn {
-            position: absolute;
-            top: 8px;
-            right: 8px;
-            background-color: #ff3b30;
-            color: white;
-            border: none;
-            width: 24px;
-            height: 24px;
-            border-radius: 12px;
-            cursor: pointer;
-            font-size: 16px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
         }
         
         /* 共通スタイル */
@@ -326,8 +316,7 @@
         }
         
         .setting-item input[type="number"],
-        .setting-item select,
-        .setting-item input[type="text"] {
+        .setting-item select {
             padding: 10px;
             border: 1px solid #d1d1d6;
             border-radius: 8px;
@@ -335,7 +324,7 @@
             background-color: white;
         }
         
-        .azure-settings {
+        .auto-capture-settings {
             background-color: #e3f2fd;
             border: 1px solid #90caf9;
             padding: 20px;
@@ -343,7 +332,7 @@
             margin: 20px 0;
         }
         
-        .azure-settings h3 {
+        .auto-capture-settings h3 {
             color: #1976d2;
             margin-top: 0;
         }
@@ -438,57 +427,66 @@
         <div id="receiveSection" class="section">
             <h2>ファイル受信</h2>
             
-            <div class="azure-settings">
-                <h3>🔐 Azure Document Intelligence 設定</h3>
+            <div class="auto-capture-settings">
+                <h3>📸 自動撮影設定</h3>
                 <div class="setting-item">
-                    <label>エンドポイント:</label>
-                    <input type="text" id="azureEndpoint" placeholder="https://your-resource.cognitiveservices.azure.com/" style="width: 100%;">
+                    <label>撮影間隔 (ミリ秒):</label>
+                    <input type="number" id="captureInterval" value="3500" min="1000" max="10000" step="500">
                 </div>
                 <div class="setting-item">
-                    <label>APIキー:</label>
-                    <input type="text" id="azureKey" placeholder="Your API Key" style="width: 100%;">
+                    <label>撮影開始遅延 (ミリ秒):</label>
+                    <input type="number" id="captureDelay" value="2000" min="0" max="5000" step="500">
                 </div>
-                <p style="font-size: 14px; color: #666; margin-top: 10px;">
-                    ※ 設定はブラウザのローカルストレージに保存されます
-                </p>
+                <div class="setting-item">
+                    <label>最大撮影枚数:</label>
+                    <input type="number" id="maxCaptures" value="20" min="5" max="50">
+                </div>
             </div>
             
             <div class="info">
-                <p>📸 送信側の画面が切り替わるたびに「写真を撮影」ボタンを押してください</p>
-                <p>💡 QRコードグリッド全体が画面に収まるように撮影してください</p>
-                <p>🔄 すべてのページを撮影したら「解析開始」ボタンを押します</p>
+                <p>📹 カメラで送信側の画面を映してください</p>
+                <p>🤖 自動的に一定間隔で撮影を行います</p>
+                <p>✋ 十分な枚数を撮影したら「撮影停止」を押してください</p>
             </div>
 
-            <div class="capture-container">
-                <label for="captureInput" class="capture-btn">
-                    📷 写真を撮影
-                    <input type="file" id="captureInput" accept="image/*" capture="environment" style="display: none;">
-                </label>
-                
-                <div id="captureStatus" class="status-message status-waiting" style="display:none;">
-                    写真を撮影してください
-                </div>
+            <div style="text-align: center; margin: 20px 0;">
+                <button class="control-btn start-btn" onclick="startAutoCapture()">
+                    🎬 自動撮影開始
+                </button>
+                <button class="control-btn stop-btn" onclick="stopAutoCapture()" style="display:none;">
+                    ⏹️ 撮影停止
+                </button>
+                <button class="control-btn process-btn" onclick="processImages()" id="processBtn" style="display:none;">
+                    🔍 解析開始
+                </button>
+                <button class="control-btn download-btn" onclick="downloadFile()" id="downloadBtn" style="display:none;">
+                    💾 ダウンロード
+                </button>
+            </div>
 
-                <div class="captured-images" id="capturedImages"></div>
+            <div id="captureStatus" class="status-message status-waiting" style="display:none;">
+                カメラを準備中...
+            </div>
 
-                <div style="text-align: center; margin: 20px 0;">
-                    <button class="control-btn process-btn" onclick="processImages()" id="processBtn" style="display:none;">
-                        🔍 解析開始
-                    </button>
-                    <button class="control-btn download-btn" onclick="downloadFile()" id="downloadBtn" style="display:none;">
-                        💾 ダウンロード
-                    </button>
+            <div id="videoContainer" style="display:none;">
+                <video id="video" autoplay playsinline></video>
+                <canvas id="captureCanvas"></canvas>
+                <div class="capture-indicator" id="captureIndicator" style="display:none;">
+                    🔴 REC
                 </div>
+            </div>
 
-                <div class="progress" id="processProgress" style="display:none;">
-                    <div class="progress-bar" id="processProgressBar"></div>
-                </div>
+            <div class="captured-images" id="capturedImages"></div>
 
-                <div id="receiveInfo" class="info" style="display:none;">
-                    <p><strong>📄 ファイル名:</strong> <span id="receivedFileName">-</span></p>
-                    <p><strong>🔢 受信チャンク:</strong> <span id="receivedChunks">0</span> / <span id="totalChunks">-</span></p>
-                    <p><strong>📸 処理済み画像:</strong> <span id="processedImages">0</span> / <span id="totalImages">0</span></p>
-                </div>
+            <div class="progress" id="processProgress" style="display:none;">
+                <div class="progress-bar" id="processProgressBar"></div>
+            </div>
+
+            <div id="receiveInfo" class="info" style="display:none;">
+                <p><strong>📄 ファイル名:</strong> <span id="receivedFileName">-</span></p>
+                <p><strong>🔢 受信チャンク:</strong> <span id="receivedChunks">0</span> / <span id="totalChunks">-</span></p>
+                <p><strong>📸 撮影枚数:</strong> <span id="capturedCount">0</span></p>
+                <p><strong>✅ 処理済み画像:</strong> <span id="processedImages">0</span></p>
             </div>
         </div>
     </div>
@@ -503,32 +501,19 @@
         let cycleCount = 0;
         
         // 受信側変数
-        let capturedImageFiles = [];
+        let capturedImages = [];
         let receivedChunksData = {};
         let totalChunksCount = 0;
         let receivedFileInfo = null;
-        let azureEndpoint = '';
-        let azureKey = '';
+        let autoCaptureInterval = null;
+        let videoStream = null;
+        
+        // Azure設定（テスト用）
+        const AZURE_ENDPOINT = 'https://azure-document-intelligence-2.cognitiveservices.azure.com/';
+        const AZURE_KEY = '7jg4O09qKLNJjCp7MKoXgR7PuEYR8j9yF9AM1VAhAiMXiHLwhkXhJQQJ99BFACYeBjFXJ3w3AAALACOG9ljp';
         
         // 初期化
         window.addEventListener('DOMContentLoaded', () => {
-            // Azure設定を読み込み
-            azureEndpoint = localStorage.getItem('azureEndpoint') || '';
-            azureKey = localStorage.getItem('azureKey') || '';
-            document.getElementById('azureEndpoint').value = azureEndpoint;
-            document.getElementById('azureKey').value = azureKey;
-            
-            // Azure設定の保存
-            document.getElementById('azureEndpoint').addEventListener('change', (e) => {
-                azureEndpoint = e.target.value;
-                localStorage.setItem('azureEndpoint', azureEndpoint);
-            });
-            
-            document.getElementById('azureKey').addEventListener('change', (e) => {
-                azureKey = e.target.value;
-                localStorage.setItem('azureKey', azureKey);
-            });
-            
             initQRGrid();
         });
 
@@ -541,6 +526,7 @@
             if (mode === 'send') {
                 document.querySelector('.mode-btn:first-child').classList.add('active');
                 document.getElementById('sendSection').classList.add('active');
+                stopAutoCapture();
             } else {
                 document.querySelector('.mode-btn:last-child').classList.add('active');
                 document.getElementById('receiveSection').classList.add('active');
@@ -775,38 +761,129 @@
             document.getElementById('sendProgress').style.width = progress + '%';
         }
 
-        // 画像キャプチャ処理
-        document.getElementById('captureInput').addEventListener('change', async function(e) {
-            const file = e.target.files[0];
-            if (!file) return;
-            
-            // 画像を追加
-            capturedImageFiles.push(file);
+        // 自動撮影開始
+        async function startAutoCapture() {
+            capturedImages = [];
             updateCapturedImagesDisplay();
             
             document.getElementById('captureStatus').style.display = 'block';
-            document.getElementById('captureStatus').textContent = `📸 ${capturedImageFiles.length}枚の写真をキャプチャしました`;
-            document.getElementById('captureStatus').className = 'status-message status-success';
+            document.getElementById('captureStatus').textContent = '📹 カメラを起動中...';
+            document.getElementById('captureStatus').className = 'status-message status-processing';
+            document.getElementById('videoContainer').style.display = 'block';
+            document.querySelector('#receiveSection .start-btn').style.display = 'none';
+            document.querySelector('#receiveSection .stop-btn').style.display = 'inline-block';
             
-            if (capturedImageFiles.length > 0) {
-                document.getElementById('processBtn').style.display = 'inline-block';
+            const video = document.getElementById('video');
+            const canvas = document.getElementById('captureCanvas');
+            
+            try {
+                // カメラを起動
+                videoStream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: 'environment',
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 }
+                    }
+                });
+                
+                video.srcObject = videoStream;
+                await video.play();
+                
+                // カメラが準備できたら撮影開始
+                const delay = parseInt(document.getElementById('captureDelay').value);
+                const interval = parseInt(document.getElementById('captureInterval').value);
+                
+                document.getElementById('captureStatus').textContent = `📸 ${delay/1000}秒後に撮影を開始します...`;
+                
+                setTimeout(() => {
+                    document.getElementById('captureIndicator').style.display = 'block';
+                    captureImage(); // 最初の撮影
+                    
+                    // 定期的に撮影
+                    autoCaptureInterval = setInterval(() => {
+                        const maxCaptures = parseInt(document.getElementById('maxCaptures').value);
+                        if (capturedImages.length >= maxCaptures) {
+                            stopAutoCapture();
+                            return;
+                        }
+                        captureImage();
+                    }, interval);
+                    
+                    document.getElementById('captureStatus').textContent = '📸 自動撮影中...';
+                }, delay);
+                
+            } catch (error) {
+                console.error('カメラエラー:', error);
+                document.getElementById('captureStatus').textContent = '❌ カメラの起動に失敗しました';
+                document.getElementById('captureStatus').className = 'status-message status-error';
+                stopAutoCapture();
+            }
+        }
+
+        // 撮影実行
+        function captureImage() {
+            const video = document.getElementById('video');
+            const canvas = document.getElementById('captureCanvas');
+            const ctx = canvas.getContext('2d');
+            
+            // ビデオのサイズに合わせてキャンバスを設定
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            
+            // ビデオフレームをキャンバスに描画
+            ctx.drawImage(video, 0, 0);
+            
+            // キャンバスからBlobを生成
+            canvas.toBlob((blob) => {
+                capturedImages.push(blob);
+                updateCapturedImagesDisplay();
+                document.getElementById('capturedCount').textContent = capturedImages.length;
+                
+                // 撮影インジケーターをフラッシュ
+                const indicator = document.getElementById('captureIndicator');
+                indicator.style.backgroundColor = '#34c759';
+                setTimeout(() => {
+                    indicator.style.backgroundColor = 'rgba(255, 59, 48, 0.9)';
+                }, 200);
+            }, 'image/jpeg', 0.9);
+        }
+
+        // 自動撮影停止
+        function stopAutoCapture() {
+            if (autoCaptureInterval) {
+                clearInterval(autoCaptureInterval);
+                autoCaptureInterval = null;
             }
             
-            // 入力をリセット
-            e.target.value = '';
-        });
+            if (videoStream) {
+                videoStream.getTracks().forEach(track => track.stop());
+                videoStream = null;
+            }
+            
+            document.getElementById('video').srcObject = null;
+            document.getElementById('videoContainer').style.display = 'none';
+            document.getElementById('captureIndicator').style.display = 'none';
+            document.querySelector('#receiveSection .start-btn').style.display = 'inline-block';
+            document.querySelector('#receiveSection .stop-btn').style.display = 'none';
+            
+            if (capturedImages.length > 0) {
+                document.getElementById('processBtn').style.display = 'inline-block';
+                document.getElementById('captureStatus').textContent = `✅ ${capturedImages.length}枚の写真を撮影しました`;
+                document.getElementById('captureStatus').className = 'status-message status-success';
+            }
+        }
 
         // キャプチャ画像表示更新
         function updateCapturedImagesDisplay() {
             const container = document.getElementById('capturedImages');
             container.innerHTML = '';
             
-            capturedImageFiles.forEach((file, index) => {
+            capturedImages.forEach((blob, index) => {
                 const div = document.createElement('div');
                 div.className = 'captured-image';
                 
                 const img = document.createElement('img');
-                img.src = URL.createObjectURL(file);
+                img.src = URL.createObjectURL(blob);
                 div.appendChild(img);
                 
                 const number = document.createElement('div');
@@ -814,27 +891,15 @@
                 number.textContent = `#${index + 1}`;
                 div.appendChild(number);
                 
-                const removeBtn = document.createElement('button');
-                removeBtn.className = 'remove-image-btn';
-                removeBtn.textContent = '×';
-                removeBtn.onclick = () => {
-                    capturedImageFiles.splice(index, 1);
-                    updateCapturedImagesDisplay();
-                    if (capturedImageFiles.length === 0) {
-                        document.getElementById('processBtn').style.display = 'none';
-                    }
-                };
-                div.appendChild(removeBtn);
-                
                 container.appendChild(div);
             });
         }
 
-        // 画像をリサイズしてJPEGに変換
-        async function resizeImage(file) {
-            return new Promise(async (resolve) => {
+        // 画像をリサイズ
+        async function resizeImage(blob) {
+            return new Promise((resolve) => {
                 const img = new Image();
-                img.onload = async () => {
+                img.onload = () => {
                     const canvas = document.createElement('canvas');
                     const ctx = canvas.getContext('2d');
                     
@@ -855,41 +920,19 @@
                     canvas.height = height;
                     ctx.drawImage(img, 0, 0, width, height);
                     
-                    canvas.toBlob((blob) => {
-                        resolve(blob);
+                    canvas.toBlob((resizedBlob) => {
+                        resolve(resizedBlob);
                     }, 'image/jpeg', 0.9);
                 };
                 
-                // HEICファイルの場合は変換
-                if (file.type === 'image/heic' || file.name.toLowerCase().endsWith('.heic')) {
-                    try {
-                        // 動的にheic2anyをインポート
-                        const { default: heic2any } = await import('https://cdn.jsdelivr.net/npm/heic2any@0.0.4/+esm');
-                        const blob = await heic2any({
-                            blob: file,
-                            toType: 'image/jpeg',
-                            quality: 0.9
-                        });
-                        img.src = URL.createObjectURL(blob);
-                    } catch (e) {
-                        console.error('HEIC変換エラー:', e);
-                        img.src = URL.createObjectURL(file);
-                    }
-                } else {
-                    img.src = URL.createObjectURL(file);
-                }
+                img.src = URL.createObjectURL(blob);
             });
         }
 
         // 画像解析処理
         async function processImages() {
-            if (!azureEndpoint || !azureKey) {
-                alert('Azure Document Intelligenceの設定を入力してください');
-                return;
-            }
-            
-            if (capturedImageFiles.length === 0) {
-                alert('画像をキャプチャしてください');
+            if (capturedImages.length === 0) {
+                alert('画像がありません');
                 return;
             }
             
@@ -903,16 +946,16 @@
             receivedFileInfo = null;
             totalChunksCount = 0;
             
-            document.getElementById('totalImages').textContent = capturedImageFiles.length;
+            document.getElementById('processedImages').textContent = '0';
             
-            for (let i = 0; i < capturedImageFiles.length; i++) {
-                document.getElementById('processedImages').textContent = i;
-                const progress = Math.round((i / capturedImageFiles.length) * 100);
+            for (let i = 0; i < capturedImages.length; i++) {
+                document.getElementById('processedImages').textContent = i + 1;
+                const progress = Math.round(((i + 1) / capturedImages.length) * 100);
                 document.getElementById('processProgressBar').style.width = progress + '%';
                 
                 try {
                     // 画像をリサイズ
-                    const resizedBlob = await resizeImage(capturedImageFiles[i]);
+                    const resizedBlob = await resizeImage(capturedImages[i]);
                     
                     // Azure APIを呼び出し
                     const results = await analyzeImageWithAzure(resizedBlob);
@@ -924,9 +967,6 @@
                     console.error(`画像 ${i + 1} の解析エラー:`, error);
                 }
             }
-            
-            document.getElementById('processedImages').textContent = capturedImageFiles.length;
-            document.getElementById('processProgressBar').style.width = '100%';
             
             // 完了チェック
             const receivedCount = Object.keys(receivedChunksData).length;
@@ -950,7 +990,7 @@
 
         // Azure Document Intelligence API呼び出し
         async function analyzeImageWithAzure(imageBlob) {
-            const analyzeUrl = `${azureEndpoint}/documentintelligence/documentModels/prebuilt-read:analyze?api-version=2024-11-30&features=barcodes`;
+            const analyzeUrl = `${AZURE_ENDPOINT}documentintelligence/documentModels/prebuilt-read:analyze?api-version=2024-11-30&features=barcodes`;
             
             // 画像をバイナリとして読み込み
             const arrayBuffer = await imageBlob.arrayBuffer();
@@ -959,7 +999,7 @@
             const response = await fetch(analyzeUrl, {
                 method: 'POST',
                 headers: {
-                    'Ocp-Apim-Subscription-Key': azureKey,
+                    'Ocp-Apim-Subscription-Key': AZURE_KEY,
                     'Content-Type': 'application/octet-stream'
                 },
                 body: arrayBuffer
@@ -987,7 +1027,7 @@
             for (let i = 0; i < maxAttempts; i++) {
                 const response = await fetch(operationUrl, {
                     headers: {
-                        'Ocp-Apim-Subscription-Key': azureKey
+                        'Ocp-Apim-Subscription-Key': AZURE_KEY
                     }
                 });
                 
@@ -1086,7 +1126,7 @@
                 URL.revokeObjectURL(url);
                 
                 // リセット
-                capturedImageFiles = [];
+                capturedImages = [];
                 updateCapturedImagesDisplay();
                 receivedChunksData = {};
                 receivedFileInfo = null;
