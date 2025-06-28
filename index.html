@@ -164,6 +164,7 @@
             font-weight: 600;
             font-size: 14px;
             animation: pulse 1s infinite;
+            transition: all 0.3s;
         }
         
         @keyframes pulse {
@@ -430,22 +431,26 @@
             <div class="auto-capture-settings">
                 <h3>📸 自動撮影設定</h3>
                 <div class="setting-item">
-                    <label>撮影間隔 (ミリ秒):</label>
-                    <input type="number" id="captureInterval" value="3500" min="1000" max="10000" step="500">
+                    <label>変化検知感度 (%):</label>
+                    <input type="number" id="changeSensitivity" value="5" min="1" max="20" step="1">
                 </div>
                 <div class="setting-item">
-                    <label>撮影開始遅延 (ミリ秒):</label>
-                    <input type="number" id="captureDelay" value="2000" min="0" max="5000" step="500">
+                    <label>変化検知後の待機時間 (ミリ秒):</label>
+                    <input type="number" id="captureDelay" value="500" min="100" max="2000" step="100">
                 </div>
                 <div class="setting-item">
                     <label>最大撮影枚数:</label>
-                    <input type="number" id="maxCaptures" value="20" min="5" max="50">
+                    <input type="number" id="maxCaptures" value="30" min="5" max="50">
+                </div>
+                <div class="setting-item">
+                    <label>同一画面スキップ:</label>
+                    <input type="checkbox" id="skipDuplicates" checked>
                 </div>
             </div>
             
             <div class="info">
                 <p>📹 カメラで送信側の画面を映してください</p>
-                <p>🤖 自動的に一定間隔で撮影を行います</p>
+                <p>🔍 QRコードの切り替わりを自動検知して撮影します</p>
                 <p>✋ 十分な枚数を撮影したら「撮影停止」を押してください</p>
             </div>
 
@@ -505,8 +510,11 @@
         let receivedChunksData = {};
         let totalChunksCount = 0;
         let receivedFileInfo = null;
-        let autoCaptureInterval = null;
         let videoStream = null;
+        let isMonitoring = false;
+        let lastFrameData = null;
+        let lastCaptureTime = 0;
+        let captureTimeoutId = null;
         
         // Azure設定（テスト用）
         const AZURE_ENDPOINT = 'https://azure-document-intelligence-2.cognitiveservices.azure.com/';
@@ -765,6 +773,8 @@
         async function startAutoCapture() {
             capturedImages = [];
             updateCapturedImagesDisplay();
+            lastFrameData = null;
+            lastCaptureTime = 0;
             
             document.getElementById('captureStatus').style.display = 'block';
             document.getElementById('captureStatus').textContent = '📹 カメラを起動中...';
@@ -789,28 +799,15 @@
                 video.srcObject = videoStream;
                 await video.play();
                 
-                // カメラが準備できたら撮影開始
-                const delay = parseInt(document.getElementById('captureDelay').value);
-                const interval = parseInt(document.getElementById('captureInterval').value);
-                
-                document.getElementById('captureStatus').textContent = `📸 ${delay/1000}秒後に撮影を開始します...`;
-                
-                setTimeout(() => {
+                // ビデオの準備ができたら監視開始
+                video.onloadedmetadata = () => {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    isMonitoring = true;
                     document.getElementById('captureIndicator').style.display = 'block';
-                    captureImage(); // 最初の撮影
-                    
-                    // 定期的に撮影
-                    autoCaptureInterval = setInterval(() => {
-                        const maxCaptures = parseInt(document.getElementById('maxCaptures').value);
-                        if (capturedImages.length >= maxCaptures) {
-                            stopAutoCapture();
-                            return;
-                        }
-                        captureImage();
-                    }, interval);
-                    
-                    document.getElementById('captureStatus').textContent = '📸 自動撮影中...';
-                }, delay);
+                    document.getElementById('captureStatus').textContent = '👀 画面の変化を監視中...';
+                    monitorChanges();
+                };
                 
             } catch (error) {
                 console.error('カメラエラー:', error);
@@ -818,6 +815,79 @@
                 document.getElementById('captureStatus').className = 'status-message status-error';
                 stopAutoCapture();
             }
+        }
+
+        // 画面変化の監視
+        function monitorChanges() {
+            if (!isMonitoring) return;
+            
+            const video = document.getElementById('video');
+            const canvas = document.getElementById('captureCanvas');
+            const ctx = canvas.getContext('2d');
+            
+            // 現在のフレームを取得
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const currentFrameData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            
+            // 前回のフレームと比較
+            if (lastFrameData) {
+                const changePercentage = calculateChangePercentage(lastFrameData, currentFrameData);
+                const sensitivity = parseFloat(document.getElementById('changeSensitivity').value);
+                
+                // 変化が閾値を超えた場合
+                if (changePercentage > sensitivity) {
+                    const now = Date.now();
+                    const timeSinceLastCapture = now - lastCaptureTime;
+                    
+                    // 前回の撮影から十分時間が経過している場合のみ撮影
+                    if (timeSinceLastCapture > 1000) { // 最低1秒の間隔
+                        // 変化検知後、少し待ってから撮影（QRコードが完全に表示されるのを待つ）
+                        if (captureTimeoutId) {
+                            clearTimeout(captureTimeoutId);
+                        }
+                        
+                        const delay = parseInt(document.getElementById('captureDelay').value);
+                        captureTimeoutId = setTimeout(() => {
+                            const maxCaptures = parseInt(document.getElementById('maxCaptures').value);
+                            if (capturedImages.length < maxCaptures) {
+                                captureImage();
+                                lastCaptureTime = Date.now();
+                                document.getElementById('captureStatus').textContent = `📸 変化を検知！ (${capturedImages.length}/${maxCaptures}枚)`;
+                            } else {
+                                stopAutoCapture();
+                            }
+                        }, delay);
+                    }
+                }
+            }
+            
+            // フレームデータを更新
+            lastFrameData = currentFrameData;
+            
+            // 次のフレームを監視
+            requestAnimationFrame(monitorChanges);
+        }
+
+        // フレーム間の変化率を計算
+        function calculateChangePercentage(oldData, newData) {
+            const pixels = oldData.data.length / 4; // RGBAなので4で割る
+            let changedPixels = 0;
+            
+            // サンプリングして高速化（全ピクセルではなく一部をチェック）
+            const sampleRate = 100; // 100ピクセルごとにチェック
+            
+            for (let i = 0; i < oldData.data.length; i += 4 * sampleRate) {
+                const rDiff = Math.abs(oldData.data[i] - newData.data[i]);
+                const gDiff = Math.abs(oldData.data[i + 1] - newData.data[i + 1]);
+                const bDiff = Math.abs(oldData.data[i + 2] - newData.data[i + 2]);
+                
+                // 色の差が閾値を超えたらカウント
+                if (rDiff + gDiff + bDiff > 30) {
+                    changedPixels++;
+                }
+            }
+            
+            return (changedPixels * sampleRate / pixels) * 100;
         }
 
         // 撮影実行
@@ -841,18 +911,22 @@
                 
                 // 撮影インジケーターをフラッシュ
                 const indicator = document.getElementById('captureIndicator');
+                indicator.textContent = '📸 CAPTURED!';
                 indicator.style.backgroundColor = '#34c759';
                 setTimeout(() => {
+                    indicator.textContent = '🔴 REC';
                     indicator.style.backgroundColor = 'rgba(255, 59, 48, 0.9)';
-                }, 200);
+                }, 300);
             }, 'image/jpeg', 0.9);
         }
 
         // 自動撮影停止
         function stopAutoCapture() {
-            if (autoCaptureInterval) {
-                clearInterval(autoCaptureInterval);
-                autoCaptureInterval = null;
+            isMonitoring = false;
+            
+            if (captureTimeoutId) {
+                clearTimeout(captureTimeoutId);
+                captureTimeoutId = null;
             }
             
             if (videoStream) {
@@ -870,7 +944,61 @@
                 document.getElementById('processBtn').style.display = 'inline-block';
                 document.getElementById('captureStatus').textContent = `✅ ${capturedImages.length}枚の写真を撮影しました`;
                 document.getElementById('captureStatus').className = 'status-message status-success';
+                
+                // 重複チェック（オプション）
+                if (document.getElementById('skipDuplicates').checked) {
+                    removeDuplicates();
+                }
             }
+        }
+
+        // 重複画像の除去（ハッシュベース）
+        async function removeDuplicates() {
+            const uniqueImages = [];
+            const hashes = new Set();
+            
+            for (const image of capturedImages) {
+                const hash = await calculateImageHash(image);
+                if (!hashes.has(hash)) {
+                    hashes.add(hash);
+                    uniqueImages.push(image);
+                }
+            }
+            
+            const removed = capturedImages.length - uniqueImages.length;
+            if (removed > 0) {
+                capturedImages = uniqueImages;
+                updateCapturedImagesDisplay();
+                document.getElementById('captureStatus').textContent += ` (${removed}枚の重複を除去)`;
+            }
+        }
+
+        // 簡易的な画像ハッシュ計算
+        async function calculateImageHash(blob) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    
+                    // 小さいサイズにリサイズしてハッシュ計算を高速化
+                    canvas.width = 50;
+                    canvas.height = 50;
+                    ctx.drawImage(img, 0, 0, 50, 50);
+                    
+                    const imageData = ctx.getImageData(0, 0, 50, 50);
+                    let hash = 0;
+                    
+                    // 簡易ハッシュ計算
+                    for (let i = 0; i < imageData.data.length; i += 40) {
+                        hash = ((hash << 5) - hash) + imageData.data[i];
+                        hash = hash & hash;
+                    }
+                    
+                    resolve(hash);
+                };
+                img.src = URL.createObjectURL(blob);
+            });
         }
 
         // キャプチャ画像表示更新
