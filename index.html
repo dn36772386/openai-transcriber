@@ -3,31 +3,30 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QRコード3×3グリッド転送システム</title>
+    <title>QRコード3×3グリッド転送システム - Azure版</title>
     <!-- QRコード生成ライブラリ -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <!-- 圧縮ライブラリ -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
-    <!-- QRコード読み取りライブラリ -->
-    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
     <style>
         body {
-            font-family: Arial, sans-serif;
-            max-width: 1400px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1200px;
             margin: 0 auto;
             padding: 20px;
-            background-color: #f0f0f0;
+            background-color: #f5f5f7;
         }
         .container {
             background-color: white;
-            border-radius: 10px;
+            border-radius: 16px;
             padding: 30px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
         }
         h1 {
-            color: #333;
+            color: #1d1d1f;
             text-align: center;
             margin-bottom: 30px;
+            font-size: 2rem;
         }
         .mode-selector {
             display: flex;
@@ -38,15 +37,15 @@
         .mode-btn {
             padding: 15px 40px;
             font-size: 18px;
-            border: 2px solid #007bff;
+            border: 2px solid #007aff;
             background-color: white;
-            color: #007bff;
-            border-radius: 5px;
+            color: #007aff;
+            border-radius: 12px;
             cursor: pointer;
             transition: all 0.3s;
         }
         .mode-btn.active {
-            background-color: #007bff;
+            background-color: #007aff;
             color: white;
         }
         .section {
@@ -56,24 +55,27 @@
         .section.active {
             display: block;
         }
-        #fileInput {
-            display: none;
-        }
+        
+        /* 送信側スタイル */
         .file-label {
             display: inline-block;
-            padding: 12px 24px;
-            background-color: #28a745;
+            padding: 14px 28px;
+            background-color: #34c759;
             color: white;
-            border-radius: 5px;
+            border-radius: 12px;
             cursor: pointer;
             margin-bottom: 20px;
             font-size: 16px;
+            font-weight: 500;
         }
         .file-label:hover {
-            background-color: #218838;
+            background-color: #28a745;
+        }
+        #fileInput {
+            display: none;
         }
         
-        /* QRコードグリッド表示 */
+        /* QRコードグリッド */
         #qrGridDisplay {
             text-align: center;
             margin: 20px auto;
@@ -88,50 +90,27 @@
             display: grid;
             grid-template-columns: repeat(3, 1fr);
             grid-template-rows: repeat(3, 1fr);
-            gap: 10px;
-            padding: 15px;
-            background-color: #f8f9fa;
-            border-radius: 15px;
-            box-shadow: 0 3px 15px rgba(0,0,0,0.1);
-            opacity: 1;
-            transition: opacity 0.3s ease;
+            gap: 15px;
+            padding: 20px;
+            background-color: #f5f5f7;
+            border-radius: 20px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
             width: 100%;
             max-width: 900px;
             aspect-ratio: 1 / 1;
-            box-sizing: border-box;
-        }
-        
-        .qr-grid.transitioning {
-            animation: fadeTransition 0.5s ease;
-        }
-        
-        @keyframes fadeTransition {
-            0% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.3; transform: scale(0.95); }
-            100% { opacity: 1; transform: scale(1); }
         }
         
         .qr-cell {
             background-color: white;
-            border: 2px solid #ddd;
-            border-radius: 10px;
-            padding: 10px;
+            border: 2px solid #e5e5e7;
+            border-radius: 16px;
+            padding: 15px;
             display: flex;
             align-items: center;
             justify-content: center;
             position: relative;
             overflow: hidden;
             aspect-ratio: 1 / 1;
-            width: 100%;
-            box-sizing: border-box;
-        }
-        
-        .qr-cell > div:last-child {
-            width: 100%;
-            height: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
         }
         
         .qr-cell canvas {
@@ -141,357 +120,256 @@
             height: auto !important;
         }
         
-        .qr-cell.active {
-            border-color: #007bff;
-            box-shadow: 0 2px 10px rgba(0,123,255,0.3);
-        }
-        
-        .qr-cell.empty {
-            background-color: #f0f0f0;
-        }
-        
         .qr-cell-header {
             position: absolute;
-            top: 5px;
-            left: 5px;
-            background-color: #007bff;
+            top: 8px;
+            left: 8px;
+            background-color: #007aff;
             color: white;
-            padding: 2px 8px;
-            border-radius: 5px;
+            padding: 4px 12px;
+            border-radius: 8px;
             font-size: 12px;
-            font-weight: bold;
+            font-weight: 600;
             z-index: 1;
         }
         
-        /* 受信側のビデオグリッド表示 */
-        #videoContainer {
-            position: relative;
-            width: 100%;
-            max-width: 900px;
+        /* 受信側スタイル */
+        .capture-container {
+            max-width: 600px;
             margin: 0 auto;
-            aspect-ratio: 1 / 1;
-            overflow: hidden;
-            background-color: #000;
-            border-radius: 10px;
-            min-height: 300px;
         }
         
-        #video {
+        .capture-btn {
+            width: 100%;
+            padding: 20px;
+            font-size: 20px;
+            font-weight: 600;
+            background-color: #007aff;
+            color: white;
+            border: none;
+            border-radius: 16px;
+            cursor: pointer;
+            margin: 20px 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        
+        .capture-btn:hover {
+            background-color: #0051d5;
+        }
+        
+        .capture-btn:disabled {
+            background-color: #c7c7cc;
+            cursor: not-allowed;
+        }
+        
+        .captured-images {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        
+        .captured-image {
+            position: relative;
+            border-radius: 12px;
+            overflow: hidden;
+            background-color: #f5f5f7;
+            aspect-ratio: 1;
+        }
+        
+        .captured-image img {
             width: 100%;
             height: 100%;
             object-fit: cover;
-            border: 2px solid #ddd;
-            border-radius: 10px;
         }
         
-        #canvas {
-            display: none;
-        }
-        
-        .scan-grid-overlay {
+        .captured-image-number {
             position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            pointer-events: none;
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            grid-template-rows: repeat(3, 1fr);
-            gap: 2px;
-            padding: 10px;
-            box-sizing: border-box;
+            top: 8px;
+            left: 8px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
         }
         
-        .scan-cell {
-            border: 3px solid rgba(0, 123, 255, 0.5);
-            border-radius: 5px;
-            transition: all 0.3s;
-            background-color: rgba(0, 123, 255, 0.05);
+        .remove-image-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background-color: #ff3b30;
+            color: white;
+            border: none;
+            width: 24px;
+            height: 24px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
         
-        .scan-cell.detected {
-            border-color: #28a745;
-            border-width: 4px;
-            background-color: rgba(40, 167, 69, 0.15);
-            animation: detectedPulse 0.5s ease-out;
+        /* 共通スタイル */
+        .info {
+            background-color: #f5f5f7;
+            padding: 20px;
+            border-radius: 12px;
+            margin: 15px 0;
+            border-left: 4px solid #007aff;
         }
         
-        @keyframes detectedPulse {
-            0% { background-color: rgba(40, 167, 69, 0.3); }
-            100% { background-color: rgba(40, 167, 69, 0.1); }
+        .info p {
+            margin: 8px 0;
+            color: #1d1d1f;
         }
         
         .progress {
             width: 100%;
-            height: 40px;
-            background-color: #e0e0e0;
-            border-radius: 20px;
+            height: 8px;
+            background-color: #e5e5e7;
+            border-radius: 4px;
             overflow: hidden;
             margin: 20px 0;
-            box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
         }
+        
         .progress-bar {
             height: 100%;
-            background: linear-gradient(45deg, #007bff, #0056b3);
+            background: linear-gradient(90deg, #007aff, #0051d5);
             width: 0%;
             transition: width 0.3s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-weight: bold;
-            font-size: 16px;
         }
-        .info {
-            background-color: #f8f9fa;
-            padding: 20px;
-            border-radius: 10px;
-            margin: 15px 0;
-            border-left: 4px solid #007bff;
-        }
-        .info p {
-            margin: 8px 0;
-        }
-        .controls {
-            margin: 30px 0;
-            text-align: center;
-        }
+        
         .control-btn {
-            padding: 12px 30px;
+            padding: 14px 28px;
             margin: 0 10px;
             border: none;
-            border-radius: 5px;
+            border-radius: 12px;
             cursor: pointer;
             font-size: 16px;
+            font-weight: 500;
             transition: all 0.3s;
         }
+        
         .start-btn {
-            background-color: #007bff;
+            background-color: #007aff;
             color: white;
         }
-        .start-btn:hover {
-            background-color: #0056b3;
-        }
+        
         .stop-btn {
-            background-color: #dc3545;
+            background-color: #ff3b30;
             color: white;
         }
-        .stop-btn:hover {
-            background-color: #c82333;
+        
+        .process-btn {
+            background-color: #34c759;
+            color: white;
         }
+        
         .download-btn {
-            background-color: #28a745;
+            background-color: #5856d6;
             color: white;
-            display: none;
         }
-        .download-btn:hover {
-            background-color: #218838;
+        
+        .status-message {
+            text-align: center;
+            font-size: 18px;
+            font-weight: 600;
+            margin: 20px 0;
+            padding: 16px;
+            border-radius: 12px;
         }
+        
+        .status-waiting {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        
+        .status-processing {
+            background-color: #cfe2ff;
+            color: #084298;
+        }
+        
+        .status-success {
+            background-color: #d1e7dd;
+            color: #0f5132;
+        }
+        
+        .status-error {
+            background-color: #f8d7da;
+            color: #842029;
+        }
+        
         .settings {
-            background-color: #f8f9fa;
+            background-color: #f5f5f7;
             padding: 20px;
-            border-radius: 10px;
+            border-radius: 12px;
             margin-bottom: 20px;
         }
+        
         .setting-item {
             margin: 15px 0;
             display: flex;
             align-items: center;
             gap: 15px;
         }
+        
         .setting-item label {
             flex: 1;
             font-weight: 500;
+            color: #1d1d1f;
         }
-        .setting-item input[type="number"] {
-            width: 100px;
-            padding: 8px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
+        
+        .setting-item input[type="number"],
+        .setting-item select,
+        .setting-item input[type="text"] {
+            padding: 10px;
+            border: 1px solid #d1d1d6;
+            border-radius: 8px;
             font-size: 16px;
+            background-color: white;
         }
-        .setting-item select {
-            padding: 8px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            font-size: 16px;
-        }
-        .chunk-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(30px, 1fr));
-            gap: 3px;
+        
+        .azure-settings {
+            background-color: #e3f2fd;
+            border: 1px solid #90caf9;
+            padding: 20px;
+            border-radius: 12px;
             margin: 20px 0;
-            padding: 15px;
-            background-color: #f8f9fa;
-            border-radius: 10px;
-            max-width: 900px;
-            margin-left: auto;
-            margin-right: auto;
-        }
-        .chunk-indicator {
-            width: 30px;
-            height: 30px;
-            border-radius: 5px;
-            background-color: #e0e0e0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 12px;
-            font-weight: bold;
-            color: white;
-            transition: all 0.3s;
-        }
-        .chunk-indicator.waiting {
-            background-color: #e0e0e0;
-            color: #666;
-        }
-        .chunk-indicator.received {
-            background-color: #28a745;
-            animation: receivedPulse 0.5s ease-out;
-        }
-        .chunk-indicator.current {
-            background-color: #ffc107;
-            animation: pulse 1s infinite;
-        }
-        @keyframes pulse {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.1); }
-            100% { transform: scale(1); }
-        }
-        @keyframes receivedPulse {
-            0% { transform: scale(1.3); opacity: 0.7; }
-            100% { transform: scale(1); opacity: 1; }
-        }
-        .status-message {
-            text-align: center;
-            font-size: 18px;
-            font-weight: bold;
-            margin: 20px 0;
-            padding: 15px;
-            border-radius: 10px;
-        }
-        .status-sending {
-            background-color: #cfe2ff;
-            color: #084298;
-        }
-        .status-complete {
-            background-color: #d1e7dd;
-            color: #0f5132;
-        }
-        .status-waiting {
-            background-color: #fff3cd;
-            color: #664d03;
-        }
-        .debug-panel {
-            background-color: #f8d7da;
-            border: 1px solid #f5c6cb;
-            border-radius: 10px;
-            padding: 15px;
-            margin: 20px 0;
-            max-height: 300px;
-            overflow-y: auto;
-            font-family: monospace;
-            font-size: 12px;
-        }
-        .debug-log {
-            margin: 2px 0;
-            padding: 2px 5px;
-            background-color: rgba(255,255,255,0.5);
-            border-radius: 3px;
-        }
-        .debug-controls {
-            margin: 10px 0;
-            text-align: center;
-        }
-        .debug-btn {
-            padding: 8px 16px;
-            margin: 0 5px;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 14px;
-            background-color: #6c757d;
-            color: white;
-        }
-        .debug-btn:hover {
-            background-color: #5a6268;
-        }
-        .scan-indicator {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            background-color: #dc3545;
-            animation: blink 1s infinite;
-        }
-        .scan-indicator.scanning {
-            background-color: #ffc107;
-        }
-        .scan-indicator.detected {
-            background-color: #28a745;
-            animation: none;
-        }
-        @keyframes blink {
-            0%, 50% { opacity: 1; }
-            51%, 100% { opacity: 0.3; }
         }
         
-        .stats-panel {
-            background-color: #e7f3ff;
-            border: 1px solid #b6d4fe;
-            border-radius: 10px;
-            padding: 15px;
-            margin: 20px 0;
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
+        .azure-settings h3 {
+            color: #1976d2;
+            margin-top: 0;
         }
         
-        .stat-item {
-            text-align: center;
-        }
-        
-        .stat-value {
-            font-size: 24px;
-            font-weight: bold;
-            color: #007bff;
-        }
-        
-        .stat-label {
-            font-size: 14px;
-            color: #6c757d;
-            margin-top: 5px;
-        }
-        
-        /* レスポンシブ対応 */
+        /* モバイル対応 */
         @media (max-width: 768px) {
             .container {
-                padding: 15px;
+                padding: 20px;
             }
             .mode-btn {
-                padding: 12px 25px;
+                padding: 12px 24px;
                 font-size: 16px;
             }
             .qr-grid {
-                gap: 5px;
-                padding: 10px;
+                gap: 10px;
+                padding: 15px;
             }
-            .qr-cell {
-                padding: 5px;
-            }
-            .qr-cell-header {
-                font-size: 10px;
-                padding: 1px 6px;
+            .captured-images {
+                grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
             }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>📡 QRコード3×3グリッド転送システム</h1>
+        <h1>📱 QRコード3×3グリッド転送システム</h1>
         
         <div class="mode-selector">
             <button class="mode-btn active" onclick="setMode('send')">📤 送信モード</button>
@@ -500,35 +378,26 @@
 
         <!-- 送信モード -->
         <div id="sendSection" class="section active">
-            <h2>ファイル送信（3×3グリッド）</h2>
+            <h2>ファイル送信</h2>
             
             <div class="settings">
                 <h3>⚙️ 転送設定</h3>
                 <div class="setting-item">
                     <label>チャンクサイズ (バイト):</label>
-                    <input type="number" id="chunkSize" value="500" min="100" max="1000">
+                    <input type="number" id="chunkSize" value="400" min="100" max="1000">
                 </div>
                 <div class="setting-item">
                     <label>切り替え速度:</label>
                     <select id="sendSpeed">
-                        <option value="3000">ゆっくり (3秒)</option>
-                        <option value="2000">標準 (2秒)</option>
-                        <option value="1000" selected>高速 (1秒)</option>
-                        <option value="500">超高速 (0.5秒)</option>
+                        <option value="5000">ゆっくり (5秒)</option>
+                        <option value="3000" selected>標準 (3秒)</option>
+                        <option value="2000">高速 (2秒)</option>
+                        <option value="1000">超高速 (1秒)</option>
                     </select>
                 </div>
                 <div class="setting-item">
                     <label>データ圧縮を使用:</label>
                     <input type="checkbox" id="useCompression" checked>
-                </div>
-                <div class="setting-item">
-                    <label>エラー訂正レベル:</label>
-                    <select id="errorCorrection">
-                        <option value="L" selected>低 (7%)</option>
-                        <option value="M">中 (15%)</option>
-                        <option value="Q">高 (25%)</option>
-                        <option value="H">最高 (30%)</option>
-                    </select>
                 </div>
             </div>
 
@@ -537,13 +406,12 @@
             
             <div id="fileInfo" class="info" style="display:none;">
                 <p><strong>📄 ファイル名:</strong> <span id="fileName"></span></p>
-                <p><strong>📊 元のサイズ:</strong> <span id="fileSize"></span></p>
-                <p><strong>🗜️ 圧縮後サイズ:</strong> <span id="compressedSize"></span></p>
+                <p><strong>📊 サイズ:</strong> <span id="fileSize"></span></p>
                 <p><strong>🔢 総チャンク数:</strong> <span id="chunkCount"></span></p>
-                <p><strong>📦 グリッドページ数:</strong> <span id="gridPageCount"></span></p>
+                <p><strong>📦 総ページ数:</strong> <span id="totalPages"></span></p>
             </div>
 
-            <div class="controls">
+            <div style="text-align: center; margin: 20px 0;">
                 <button class="control-btn start-btn" onclick="startTransmission()" style="display:none;">▶️ 送信開始</button>
                 <button class="control-btn stop-btn" onclick="stopTransmission()" style="display:none;">⏹️ 送信停止</button>
             </div>
@@ -557,100 +425,71 @@
             </div>
 
             <div class="progress" style="display:none;">
-                <div class="progress-bar" id="sendProgress">0%</div>
+                <div class="progress-bar" id="sendProgress"></div>
             </div>
 
-            <div class="stats-panel" id="sendStats" style="display:none;">
-                <div class="stat-item">
-                    <div class="stat-value" id="currentGridPage">0</div>
-                    <div class="stat-label">現在のページ</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-value" id="totalGridPages">0</div>
-                    <div class="stat-label">総ページ数</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-value" id="cycleCount">0</div>
-                    <div class="stat-label">サイクル数</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-value" id="throughput">0</div>
-                    <div class="stat-label">転送速度 (KB/s)</div>
-                </div>
+            <div class="info" id="pageInfo" style="display:none;">
+                <p><strong>📄 現在のページ:</strong> <span id="currentPage">0</span> / <span id="totalPagesDisplay">0</span></p>
+                <p><strong>🔄 サイクル数:</strong> <span id="cycleCount">0</span></p>
             </div>
-
-            <div class="chunk-grid" id="sendChunkGrid" style="display:none;"></div>
         </div>
 
         <!-- 受信モード -->
         <div id="receiveSection" class="section">
-            <h2>ファイル受信（3×3グリッド）</h2>
+            <h2>ファイル受信</h2>
+            
+            <div class="azure-settings">
+                <h3>🔐 Azure Document Intelligence 設定</h3>
+                <div class="setting-item">
+                    <label>エンドポイント:</label>
+                    <input type="text" id="azureEndpoint" placeholder="https://your-resource.cognitiveservices.azure.com/" style="width: 100%;">
+                </div>
+                <div class="setting-item">
+                    <label>APIキー:</label>
+                    <input type="text" id="azureKey" placeholder="Your API Key" style="width: 100%;">
+                </div>
+                <p style="font-size: 14px; color: #666; margin-top: 10px;">
+                    ※ 設定はブラウザのローカルストレージに保存されます
+                </p>
+            </div>
             
             <div class="info">
-                <p>📷 カメラで送信側の3×3グリッドQRコードを読み取ってください</p>
-                <p>複数のQRコードを同時に検出し、高速に転送を完了します</p>
-                <p>💡 ヒント: QRコードグリッド全体が青いガイド枠内に収まるように調整してください</p>
+                <p>📸 送信側の画面が切り替わるたびに「写真を撮影」ボタンを押してください</p>
+                <p>💡 QRコードグリッド全体が画面に収まるように撮影してください</p>
+                <p>🔄 すべてのページを撮影したら「解析開始」ボタンを押します</p>
             </div>
 
-            <div class="controls">
-                <button class="control-btn start-btn" onclick="startScanning()">📷 スキャン開始</button>
-                <button class="control-btn stop-btn" onclick="stopScanning()" style="display:none;">⏹️ スキャン停止</button>
-                <button class="control-btn download-btn" id="downloadBtn" onclick="downloadFile()">💾 ファイルをダウンロード</button>
-            </div>
-
-            <div id="receiveStatus" class="status-message status-waiting" style="display:none;">
-                QRコードグリッドを探しています...
-            </div>
-
-            <div id="videoContainer">
-                <video id="video"></video>
-                <canvas id="canvas"></canvas>
-                <div class="scan-grid-overlay" id="scanGridOverlay"></div>
-                <div class="scan-indicator" id="scanIndicator" title="スキャン状態"></div>
-            </div>
-
-            <div class="debug-controls">
-                <button class="debug-btn" onclick="toggleDebug()">🐛 デバッグパネル表示/非表示</button>
-                <button class="debug-btn" onclick="copyDebugLog()">📋 ログをコピー</button>
-                <button class="debug-btn" onclick="clearDebugLog()">🗑️ ログをクリア</button>
-            </div>
-
-            <div class="debug-panel" id="debugPanel" style="display:none;">
-                <strong>デバッグログ:</strong>
-                <div id="debugLogs"></div>
-            </div>
-
-            <div class="progress" style="display:none;">
-                <div class="progress-bar" id="receiveProgress">0%</div>
-            </div>
-
-            <div id="receiveInfo" class="info" style="display:none;">
-                <p><strong>📄 受信ファイル名:</strong> <span id="receivedFileName"></span></p>
-                <p><strong>📊 受信状況:</strong> <span id="receiveCount">0</span> / <span id="totalCount">0</span> チャンク</p>
-                <p><strong>🔍 不足チャンク:</strong> <span id="missingChunks">-</span></p>
-                <p><strong>⚡ 同時検出数:</strong> <span id="simultaneousDetections">0</span></p>
-            </div>
-
-            <div class="stats-panel" id="receiveStats" style="display:none;">
-                <div class="stat-item">
-                    <div class="stat-value" id="detectionsPerSecond">0</div>
-                    <div class="stat-label">検出数/秒</div>
+            <div class="capture-container">
+                <label for="captureInput" class="capture-btn">
+                    📷 写真を撮影
+                    <input type="file" id="captureInput" accept="image/*" capture="environment" style="display: none;">
+                </label>
+                
+                <div id="captureStatus" class="status-message status-waiting" style="display:none;">
+                    写真を撮影してください
                 </div>
-                <div class="stat-item">
-                    <div class="stat-value" id="avgDetectionsPerFrame">0</div>
-                    <div class="stat-label">平均検出数/フレーム</div>
+
+                <div class="captured-images" id="capturedImages"></div>
+
+                <div style="text-align: center; margin: 20px 0;">
+                    <button class="control-btn process-btn" onclick="processImages()" id="processBtn" style="display:none;">
+                        🔍 解析開始
+                    </button>
+                    <button class="control-btn download-btn" onclick="downloadFile()" id="downloadBtn" style="display:none;">
+                        💾 ダウンロード
+                    </button>
                 </div>
-                <div class="stat-item">
-                    <div class="stat-value" id="totalDetections">0</div>
-                    <div class="stat-label">総検出数</div>
+
+                <div class="progress" id="processProgress" style="display:none;">
+                    <div class="progress-bar" id="processProgressBar"></div>
                 </div>
-                <div class="stat-item">
-                    <div class="stat-value" id="elapsedTime">0</div>
-                    <div class="stat-label">経過時間 (秒)</div>
+
+                <div id="receiveInfo" class="info" style="display:none;">
+                    <p><strong>📄 ファイル名:</strong> <span id="receivedFileName">-</span></p>
+                    <p><strong>🔢 受信チャンク:</strong> <span id="receivedChunks">0</span> / <span id="totalChunks">-</span></p>
+                    <p><strong>📸 処理済み画像:</strong> <span id="processedImages">0</span> / <span id="totalImages">0</span></p>
                 </div>
             </div>
-
-            <div class="chunk-grid" id="receiveChunkGrid" style="display:none;"></div>
         </div>
     </div>
 
@@ -659,100 +498,39 @@
         let currentMode = 'send';
         let fileData = null;
         let chunks = [];
-        let currentGridPage = 0;
+        let currentPage = 0;
         let transmissionInterval = null;
-        let qrCodes = [];
         let cycleCount = 0;
-        let transmissionStartTime = null;
         
-        // 受信用変数
-        let receivedChunks = {};
-        let totalChunks = 0;
-        let receivedFileName = '';
-        let receivedFileType = '';
-        let isCompressed = false;
-        let scanning = false;
-        let video = null;
-        let canvasElement = null;
-        let canvas = null;
-        let headerReceived = false;
-        let receiveStartTime = null;
-        let detectionStats = {
-            total: 0,
-            perSecond: 0,
-            lastSecond: Date.now(),
-            currentSecondCount: 0,
-            avgPerFrame: []
-        };
+        // 受信側変数
+        let capturedImageFiles = [];
+        let receivedChunksData = {};
+        let totalChunksCount = 0;
+        let receivedFileInfo = null;
+        let azureEndpoint = '';
+        let azureKey = '';
         
-        // デバッグ用変数
-        let debugLogs = [];
-        let scanAttempts = 0;
-        let debugMode = false;
-
-        // 定数
-        const GRID_SIZE = 3; // 3×3グリッド
-        const TOTAL_CELLS = GRID_SIZE * GRID_SIZE;
-
-        // デバッグログ追加
-        function addDebugLog(message, type = 'info') {
-            const timestamp = new Date().toLocaleTimeString('ja-JP', { hour12: false, milliseconds: true });
-            const log = `[${timestamp}] [${type.toUpperCase()}] ${message}`;
-            debugLogs.push(log);
+        // 初期化
+        window.addEventListener('DOMContentLoaded', () => {
+            // Azure設定を読み込み
+            azureEndpoint = localStorage.getItem('azureEndpoint') || '';
+            azureKey = localStorage.getItem('azureKey') || '';
+            document.getElementById('azureEndpoint').value = azureEndpoint;
+            document.getElementById('azureKey').value = azureKey;
             
-            if (debugLogs.length > 100) {
-                debugLogs.shift();
-            }
-            
-            if (debugMode) {
-                updateDebugPanel();
-            }
-        }
-
-        // デバッグパネル更新
-        function updateDebugPanel() {
-            const debugDiv = document.getElementById('debugLogs');
-            debugDiv.innerHTML = debugLogs.map(log => {
-                let className = 'debug-log';
-                if (log.includes('[ERROR]')) className += ' text-danger';
-                else if (log.includes('[SUCCESS]')) className += ' text-success';
-                else if (log.includes('[WARNING]')) className += ' text-warning';
-                return `<div class="${className}">${log}</div>`;
-            }).join('');
-            debugDiv.scrollTop = debugDiv.scrollHeight;
-        }
-
-        // デバッグパネル表示切替
-        function toggleDebug() {
-            debugMode = !debugMode;
-            document.getElementById('debugPanel').style.display = debugMode ? 'block' : 'none';
-            if (debugMode) {
-                updateDebugPanel();
-            }
-        }
-
-        // デバッグログコピー
-        function copyDebugLog() {
-            const logText = debugLogs.join('\n');
-            navigator.clipboard.writeText(logText).then(() => {
-                alert('デバッグログをクリップボードにコピーしました');
-            }).catch(err => {
-                console.error('コピーに失敗:', err);
-                const textarea = document.createElement('textarea');
-                textarea.value = logText;
-                document.body.appendChild(textarea);
-                textarea.select();
-                document.execCommand('copy');
-                document.body.removeChild(textarea);
-                alert('デバッグログをクリップボードにコピーしました（フォールバック）');
+            // Azure設定の保存
+            document.getElementById('azureEndpoint').addEventListener('change', (e) => {
+                azureEndpoint = e.target.value;
+                localStorage.setItem('azureEndpoint', azureEndpoint);
             });
-        }
-
-        // デバッグログクリア
-        function clearDebugLog() {
-            debugLogs = [];
-            updateDebugPanel();
-        }
+            
+            document.getElementById('azureKey').addEventListener('change', (e) => {
+                azureKey = e.target.value;
+                localStorage.setItem('azureKey', azureKey);
+            });
+            
+            initQRGrid();
+        });
 
         // モード切替
         function setMode(mode) {
@@ -763,7 +541,6 @@
             if (mode === 'send') {
                 document.querySelector('.mode-btn:first-child').classList.add('active');
                 document.getElementById('sendSection').classList.add('active');
-                stopScanning();
             } else {
                 document.querySelector('.mode-btn:last-child').classList.add('active');
                 document.getElementById('receiveSection').classList.add('active');
@@ -771,19 +548,70 @@
             }
         }
 
-        // グリッドオーバーレイ初期化
-        function initScanGridOverlay() {
-            const overlay = document.getElementById('scanGridOverlay');
-            overlay.innerHTML = '';
-            for (let i = 0; i < TOTAL_CELLS; i++) {
+        // QRグリッド初期化
+        function initQRGrid() {
+            const grid = document.getElementById('qrGrid');
+            grid.innerHTML = '';
+            for (let i = 0; i < 9; i++) {
                 const cell = document.createElement('div');
-                cell.className = 'scan-cell';
-                cell.id = `scan-cell-${i}`;
-                overlay.appendChild(cell);
+                cell.className = 'qr-cell';
+                cell.id = `qr-cell-${i}`;
+                grid.appendChild(cell);
             }
         }
 
-        // Base64エンコード用のヘルパー関数
+        // ファイル選択処理
+        document.getElementById('fileInput').addEventListener('change', async function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            document.getElementById('fileInfo').style.display = 'block';
+            document.getElementById('fileName').textContent = file.name;
+            document.getElementById('fileSize').textContent = formatFileSize(file.size);
+            
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                const arrayBuffer = e.target.result;
+                const uint8Array = new Uint8Array(arrayBuffer);
+                
+                const useCompression = document.getElementById('useCompression').checked;
+                let processedData;
+                
+                if (useCompression) {
+                    processedData = pako.deflate(uint8Array);
+                } else {
+                    processedData = uint8Array;
+                }
+                
+                const base64Data = arrayBufferToBase64(processedData);
+                
+                fileData = {
+                    name: file.name,
+                    type: file.type,
+                    data: base64Data,
+                    compressed: useCompression
+                };
+                
+                const chunkSize = parseInt(document.getElementById('chunkSize').value);
+                chunks = [];
+                for (let i = 0; i < fileData.data.length; i += chunkSize) {
+                    chunks.push(fileData.data.substr(i, chunkSize));
+                }
+                
+                const totalPages = Math.ceil((chunks.length + 1) / 9);
+                
+                document.getElementById('chunkCount').textContent = chunks.length;
+                document.getElementById('totalPages').textContent = totalPages;
+                document.getElementById('sendStatus').style.display = 'block';
+                document.querySelector('.start-btn').style.display = 'inline-block';
+                
+                displayInitialPage();
+            };
+            
+            reader.readAsArrayBuffer(file);
+        });
+
+        // Base64エンコード
         function arrayBufferToBase64(buffer) {
             let binary = '';
             const bytes = new Uint8Array(buffer);
@@ -797,141 +625,25 @@
             return btoa(binary);
         }
 
-        // ファイル選択処理
-        document.getElementById('fileInput').addEventListener('change', async function(e) {
-            const file = e.target.files[0];
-            if (!file) return;
-
-            document.getElementById('fileInfo').style.display = 'block';
-            document.getElementById('fileName').textContent = file.name;
-            document.getElementById('fileSize').textContent = formatFileSize(file.size);
-            document.getElementById('compressedSize').textContent = '処理中...';
-            document.getElementById('chunkCount').textContent = '計算中...';
-            
-            document.getElementById('sendStatus').style.display = 'block';
-            document.getElementById('sendStatus').textContent = '⏳ ファイルを処理中... しばらくお待ちください';
-            document.getElementById('sendStatus').className = 'status-message status-sending';
-            
-            document.querySelector('#sendSection .progress').style.display = 'block';
-            const progressBar = document.getElementById('sendProgress');
-            progressBar.style.width = '0%';
-            progressBar.textContent = 'ファイル読み込み中...';
-
-            const reader = new FileReader();
-            reader.onload = async function(e) {
-                try {
-                    const arrayBuffer = e.target.result;
-                    const uint8Array = new Uint8Array(arrayBuffer);
-                    
-                    const useCompression = document.getElementById('useCompression').checked;
-                    let processedData;
-                    
-                    progressBar.style.width = '30%';
-                    progressBar.textContent = '圧縮処理中...';
-                    
-                    await new Promise((resolve) => {
-                        setTimeout(() => {
-                            if (useCompression) {
-                                const compressionLevel = file.size > 5 * 1024 * 1024 ? 1 : 6;
-                                processedData = pako.deflate(uint8Array, { level: compressionLevel });
-                                isCompressed = true;
-                            } else {
-                                processedData = uint8Array;
-                                isCompressed = false;
-                            }
-                            resolve();
-                        }, 10);
-                    });
-                    
-                    progressBar.style.width = '60%';
-                    progressBar.textContent = 'Base64エンコード中...';
-                    
-                    const base64Data = await new Promise((resolve) => {
-                        setTimeout(() => {
-                            const result = arrayBufferToBase64(processedData);
-                            resolve(result);
-                        }, 10);
-                    });
-                    
-                    fileData = {
-                        name: file.name,
-                        type: file.type,
-                        data: base64Data,
-                        compressed: isCompressed,
-                        originalSize: file.size,
-                        compressedSize: processedData.length
-                    };
-                    
-                    progressBar.style.width = '90%';
-                    progressBar.textContent = 'チャンク分割中...';
-                    
-                    await new Promise((resolve) => {
-                        setTimeout(() => {
-                            const chunkSize = parseInt(document.getElementById('chunkSize').value);
-                            chunks = [];
-                            const dataLength = fileData.data.length;
-                            for (let i = 0; i < dataLength; i += chunkSize) {
-                                chunks.push(fileData.data.substr(i, chunkSize));
-                            }
-                            resolve();
-                        }, 10);
-                    });
-
-                    const gridPageCount = Math.ceil((chunks.length + 1) / TOTAL_CELLS); // +1 for header
-                    
-                    document.getElementById('compressedSize').textContent = formatFileSize(processedData.length);
-                    document.getElementById('chunkCount').textContent = chunks.length;
-                    document.getElementById('gridPageCount').textContent = gridPageCount;
-                    document.querySelector('.start-btn').style.display = 'inline-block';
-                    
-                    initChunkGrid('send', chunks.length);
-                    initQRGrid();
-                    displayInitialGrid();
-                    
-                    progressBar.style.width = '100%';
-                    progressBar.textContent = '準備完了！';
-                    document.getElementById('sendStatus').textContent = '✅ 準備完了 - 送信開始を押してください';
-                    document.getElementById('sendStatus').className = 'status-message status-complete';
-                    
-                    setTimeout(() => {
-                        document.querySelector('#sendSection .progress').style.display = 'none';
-                    }, 3000);
-                    
-                } catch (error) {
-                    console.error('ファイル処理エラー:', error);
-                    alert('ファイルの処理中にエラーが発生しました: ' + error.message);
-                }
-            };
-            
-            reader.readAsArrayBuffer(file);
-        });
-
-        // QRグリッド初期化
-        function initQRGrid() {
-            const grid = document.getElementById('qrGrid');
-            grid.innerHTML = '';
-            for (let i = 0; i < TOTAL_CELLS; i++) {
-                const cell = document.createElement('div');
-                cell.className = 'qr-cell empty';
-                cell.id = `qr-cell-${i}`;
-                grid.appendChild(cell);
-            }
+        // ファイルサイズフォーマット
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            else if (bytes < 1048576) return Math.round(bytes / 1024) + ' KB';
+            else return Math.round(bytes / 1048576 * 10) / 10 + ' MB';
         }
 
-        // 初期グリッド表示（ヘッダーのみ）
-        function displayInitialGrid() {
+        // 初期ページ表示
+        function displayInitialPage() {
             const headerData = JSON.stringify({
                 type: 'header',
                 fileName: fileData.name,
                 fileType: fileData.type,
                 compressed: fileData.compressed,
-                totalChunks: chunks.length,
-                timestamp: Date.now()
+                totalChunks: chunks.length
             });
             
             const cell = document.getElementById('qr-cell-0');
             cell.innerHTML = '';
-            cell.className = 'qr-cell active';
             
             const header = document.createElement('div');
             header.className = 'qr-cell-header';
@@ -941,72 +653,46 @@
             const qrDiv = document.createElement('div');
             cell.appendChild(qrDiv);
             
-            // グリッドのサイズに基づいてQRコードサイズを計算
-            const grid = document.getElementById('qrGrid');
-            const gridRect = grid.getBoundingClientRect();
-            const cellSize = Math.floor(Math.min(gridRect.width, gridRect.height) / 3 - 20);
-            const qrSize = Math.max(140, Math.min(200, cellSize - 40));
-            
             new QRCode(qrDiv, {
                 text: headerData,
-                width: qrSize,
-                height: qrSize,
-                correctLevel: QRCode.CorrectLevel[document.getElementById('errorCorrection').value],
-                margin: 1
+                width: 200,
+                height: 200,
+                correctLevel: QRCode.CorrectLevel.M
             });
-        }
-
-        // チャンクグリッド初期化
-        function initChunkGrid(mode, totalChunks) {
-            const gridId = mode === 'send' ? 'sendChunkGrid' : 'receiveChunkGrid';
-            const grid = document.getElementById(gridId);
-            grid.innerHTML = '';
-            grid.style.display = 'grid';
             
-            for (let i = 0; i < totalChunks; i++) {
-                const indicator = document.createElement('div');
-                indicator.className = mode === 'receive' ? 'chunk-indicator waiting' : 'chunk-indicator';
-                indicator.textContent = i + 1;
-                indicator.title = `チャンク ${i + 1}`;
-                grid.appendChild(indicator);
+            for (let i = 1; i < 9; i++) {
+                document.getElementById(`qr-cell-${i}`).innerHTML = '';
             }
-        }
-
-        // チャンクグリッド更新
-        function updateChunkGrid(mode, index, status) {
-            const gridId = mode === 'send' ? 'sendChunkGrid' : 'receiveChunkGrid';
-            const grid = document.getElementById(gridId);
-            const indicators = grid.getElementsByClassName('chunk-indicator');
-            if (indicators[index]) {
-                indicators[index].className = `chunk-indicator ${status}`;
-            }
-        }
-
-        // ファイルサイズフォーマット
-        function formatFileSize(bytes) {
-            if (bytes < 1024) return bytes + ' B';
-            else if (bytes < 1048576) return Math.round(bytes / 1024) + ' KB';
-            else return Math.round(bytes / 1048576 * 10) / 10 + ' MB';
         }
 
         // 送信開始
         function startTransmission() {
-            if (!fileData || chunks.length === 0) return;
-
-            currentGridPage = -1;
+            if (!fileData) return;
+            
+            currentPage = 0;
             cycleCount = 0;
-            transmissionStartTime = Date.now();
             document.querySelector('.start-btn').style.display = 'none';
             document.querySelector('.stop-btn').style.display = 'inline-block';
             document.querySelector('.progress').style.display = 'block';
-            document.getElementById('sendStats').style.display = 'grid';
-            document.getElementById('sendStatus').textContent = '📡 送信中 - 受信側でスキャンしてください';
-            document.getElementById('sendStatus').className = 'status-message status-sending';
-
-            transmitNextGrid();
+            document.getElementById('pageInfo').style.display = 'block';
+            document.getElementById('sendStatus').textContent = '📡 送信中...';
+            document.getElementById('sendStatus').className = 'status-message status-processing';
+            
+            displayPage(currentPage);
             
             const sendSpeed = parseInt(document.getElementById('sendSpeed').value);
-            transmissionInterval = setInterval(transmitNextGrid, sendSpeed);
+            transmissionInterval = setInterval(() => {
+                currentPage++;
+                const totalPages = Math.ceil((chunks.length + 1) / 9);
+                
+                if (currentPage >= totalPages) {
+                    currentPage = 0;
+                    cycleCount++;
+                    document.getElementById('cycleCount').textContent = cycleCount;
+                }
+                
+                displayPage(currentPage);
+            }, sendSpeed);
         }
 
         // 送信停止
@@ -1021,55 +707,22 @@
             document.getElementById('sendStatus').className = 'status-message status-waiting';
         }
 
-        // 次のグリッドページを送信
-        function transmitNextGrid() {
-            currentGridPage++;
+        // ページ表示
+        function displayPage(pageIndex) {
+            const totalPages = Math.ceil((chunks.length + 1) / 9);
+            document.getElementById('currentPage').textContent = pageIndex + 1;
+            document.getElementById('totalPagesDisplay').textContent = totalPages;
             
-            const totalPages = Math.ceil((chunks.length + 1) / TOTAL_CELLS);
+            const startIndex = pageIndex * 9 - 1;
             
-            if (currentGridPage >= totalPages) {
-                currentGridPage = -1;
-                cycleCount++;
-                document.getElementById('cycleCount').textContent = cycleCount;
-            }
-
-            const grid = document.getElementById('qrGrid');
-            grid.classList.add('transitioning');
-            
-            setTimeout(() => {
-                displayGridPage(currentGridPage);
-                grid.classList.remove('transitioning');
-            }, 250);
-
-            updateTransmissionStats();
-        }
-
-        // グリッドページ表示
-        function displayGridPage(pageIndex) {
-            const grid = document.getElementById('qrGrid');
-            grid.innerHTML = '';
-            
-            const totalPages = Math.ceil((chunks.length + 1) / TOTAL_CELLS);
-            document.getElementById('currentGridPage').textContent = pageIndex + 1;
-            document.getElementById('totalGridPages').textContent = totalPages;
-            
-            // ページインデックスに基づいてチャンクを計算
-            const startIndex = pageIndex * TOTAL_CELLS - 1; // -1 because header is included
-            
-            // グリッドのサイズを計算
-            const gridRect = grid.getBoundingClientRect();
-            const cellSize = Math.floor(Math.min(gridRect.width, gridRect.height) / 3 - 20);
-            const qrSize = Math.max(140, Math.min(200, cellSize - 40));
-            
-            for (let i = 0; i < TOTAL_CELLS; i++) {
-                const cell = document.createElement('div');
+            for (let i = 0; i < 9; i++) {
+                const cell = document.getElementById(`qr-cell-${i}`);
+                cell.innerHTML = '';
+                
                 const chunkIndex = startIndex + i;
                 
                 if (pageIndex === 0 && i === 0) {
                     // ヘッダー
-                    cell.className = 'qr-cell active';
-                    cell.id = `qr-cell-${i}`;
-                    
                     const header = document.createElement('div');
                     header.className = 'qr-cell-header';
                     header.textContent = 'HEADER';
@@ -1083,22 +736,17 @@
                         fileName: fileData.name,
                         fileType: fileData.type,
                         compressed: fileData.compressed,
-                        totalChunks: chunks.length,
-                        timestamp: Date.now()
+                        totalChunks: chunks.length
                     });
                     
                     new QRCode(qrDiv, {
                         text: headerData,
-                        width: qrSize,
-                        height: qrSize,
-                        correctLevel: QRCode.CorrectLevel[document.getElementById('errorCorrection').value],
-                        margin: 1
+                        width: 200,
+                        height: 200,
+                        correctLevel: QRCode.CorrectLevel.M
                     });
                 } else if (chunkIndex >= 0 && chunkIndex < chunks.length) {
                     // データチャンク
-                    cell.className = 'qr-cell active';
-                    cell.id = `qr-cell-${i}`;
-                    
                     const header = document.createElement('div');
                     header.className = 'qr-cell-header';
                     header.textContent = `#${chunkIndex + 1}`;
@@ -1115,435 +763,344 @@
                     
                     new QRCode(qrDiv, {
                         text: chunkData,
-                        width: qrSize,
-                        height: qrSize,
-                        correctLevel: QRCode.CorrectLevel[document.getElementById('errorCorrection').value],
-                        margin: 1
+                        width: 200,
+                        height: 200,
+                        correctLevel: QRCode.CorrectLevel.M
                     });
-                    
-                    // チャンクインジケーター更新
-                    updateChunkGrid('send', chunkIndex, 'current');
-                } else {
-                    // 空のセル
-                    cell.className = 'qr-cell empty';
-                    cell.id = `qr-cell-${i}`;
                 }
-                
-                grid.appendChild(cell);
             }
             
             // 進捗更新
-            const progress = Math.round((currentGridPage + 1) / totalPages * 100);
+            const progress = Math.round((pageIndex + 1) / totalPages * 100);
             document.getElementById('sendProgress').style.width = progress + '%';
-            document.getElementById('sendProgress').textContent = progress + '%';
         }
 
-        // 送信統計更新
-        function updateTransmissionStats() {
-            if (!transmissionStartTime) return;
+        // 画像キャプチャ処理
+        document.getElementById('captureInput').addEventListener('change', async function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
             
-            const elapsed = (Date.now() - transmissionStartTime) / 1000;
-            const bytesTransmitted = currentGridPage * TOTAL_CELLS * parseInt(document.getElementById('chunkSize').value);
-            const throughput = (bytesTransmitted / 1024 / elapsed).toFixed(2);
+            // 画像を追加
+            capturedImageFiles.push(file);
+            updateCapturedImagesDisplay();
             
-            document.getElementById('throughput').textContent = throughput;
-        }
-
-        // スキャン開始
-        function startScanning() {
-            addDebugLog('スキャン開始処理を実行', 'info');
+            document.getElementById('captureStatus').style.display = 'block';
+            document.getElementById('captureStatus').textContent = `📸 ${capturedImageFiles.length}枚の写真をキャプチャしました`;
+            document.getElementById('captureStatus').className = 'status-message status-success';
             
-            if (typeof jsQR === 'undefined') {
-                addDebugLog('jsQRライブラリが見つかりません', 'error');
-                alert('QRコード読み取りライブラリが読み込まれていません。\nページを再読み込みしてください。');
-                return;
+            if (capturedImageFiles.length > 0) {
+                document.getElementById('processBtn').style.display = 'inline-block';
             }
             
-            addDebugLog('jsQRライブラリ確認OK', 'success');
-            
-            video = document.getElementById('video');
-            canvasElement = document.getElementById('canvas');
-            canvas = canvasElement.getContext('2d', { willReadFrequently: true });
-            scanning = true;
-            headerReceived = false;
-            receivedChunks = {};
-            totalChunks = 0;
-            receiveStartTime = Date.now();
-            scanAttempts = 0;
-            detectionStats = {
-                total: 0,
-                perSecond: 0,
-                lastSecond: Date.now(),
-                currentSecondCount: 0,
-                avgPerFrame: []
-            };
+            // 入力をリセット
+            e.target.value = '';
+        });
 
-            initScanGridOverlay();
+        // キャプチャ画像表示更新
+        function updateCapturedImagesDisplay() {
+            const container = document.getElementById('capturedImages');
+            container.innerHTML = '';
             
-            document.querySelector('#receiveSection .start-btn').style.display = 'none';
-            document.querySelector('#receiveSection .stop-btn').style.display = 'inline-block';
-            document.getElementById('receiveStatus').style.display = 'block';
-            document.getElementById('receiveStatus').textContent = '🔍 QRコードグリッドを探しています...';
-            document.getElementById('receiveStatus').className = 'status-message status-waiting';
-            document.getElementById('scanIndicator').className = 'scan-indicator scanning';
-            document.getElementById('receiveStats').style.display = 'grid';
-
-            addDebugLog('カメラアクセスを要求', 'info');
-            
-            const constraints = {
-                video: {
-                    facingMode: 'environment',
-                    width: { ideal: 1080 },
-                    height: { ideal: 1080 },
-                    aspectRatio: { ideal: 1 }
-                }
-            };
-            
-            navigator.mediaDevices.getUserMedia(constraints)
-                .then(function(stream) {
-                    addDebugLog('カメラアクセス成功', 'success');
-                    addDebugLog(`ストリーム情報: ${stream.getVideoTracks()[0].label}`, 'info');
-                    
-                    video.srcObject = stream;
-                    video.setAttribute('playsinline', true);
-                    
-                    video.onloadedmetadata = function() {
-                        addDebugLog(`ビデオサイズ: ${video.videoWidth}x${video.videoHeight}`, 'info');
-                        video.play();
-                        requestAnimationFrame(tick);
-                    };
-                })
-                .catch(function(err) {
-                    addDebugLog(`カメラアクセスエラー: ${err.name} - ${err.message}`, 'error');
-                    console.error('カメラの起動に失敗しました:', err);
-                    alert('カメラへのアクセスが拒否されました。ブラウザの設定を確認してください。');
-                    stopScanning();
-                });
+            capturedImageFiles.forEach((file, index) => {
+                const div = document.createElement('div');
+                div.className = 'captured-image';
+                
+                const img = document.createElement('img');
+                img.src = URL.createObjectURL(file);
+                div.appendChild(img);
+                
+                const number = document.createElement('div');
+                number.className = 'captured-image-number';
+                number.textContent = `#${index + 1}`;
+                div.appendChild(number);
+                
+                const removeBtn = document.createElement('button');
+                removeBtn.className = 'remove-image-btn';
+                removeBtn.textContent = '×';
+                removeBtn.onclick = () => {
+                    capturedImageFiles.splice(index, 1);
+                    updateCapturedImagesDisplay();
+                    if (capturedImageFiles.length === 0) {
+                        document.getElementById('processBtn').style.display = 'none';
+                    }
+                };
+                div.appendChild(removeBtn);
+                
+                container.appendChild(div);
+            });
         }
 
-        // スキャン停止
-        function stopScanning() {
-            addDebugLog('スキャン停止', 'info');
-            scanning = false;
-            if (video && video.srcObject) {
-                video.srcObject.getTracks().forEach(track => track.stop());
-            }
-            document.querySelector('#receiveSection .start-btn').style.display = 'inline-block';
-            document.querySelector('#receiveSection .stop-btn').style.display = 'none';
-            document.getElementById('scanIndicator').className = 'scan-indicator';
-        }
-
-        // QRコードスキャン処理（グリッド対応）
-        function tick() {
-            if (!scanning) return;
-            
-            scanAttempts++;
-            
-            if (video.readyState === video.HAVE_ENOUGH_DATA) {
-                // ビデオのアスペクト比を維持しながら正方形にクロップ
-                const videoWidth = video.videoWidth;
-                const videoHeight = video.videoHeight;
-                const size = Math.min(videoWidth, videoHeight);
-                
-                canvasElement.width = size;
-                canvasElement.height = size;
-                
-                const sx = (videoWidth - size) / 2;
-                const sy = (videoHeight - size) / 2;
-                
-                // 正方形にクロップして描画
-                canvas.drawImage(video, sx, sy, size, size, 0, 0, size, size);
-                
-                const detectedCodes = scanGrid();
-                
-                if (detectedCodes.length > 0) {
-                    document.getElementById('scanIndicator').className = 'scan-indicator detected';
-                    document.getElementById('simultaneousDetections').textContent = detectedCodes.length;
+        // 画像をリサイズしてJPEGに変換
+        async function resizeImage(file) {
+            return new Promise(async (resolve) => {
+                const img = new Image();
+                img.onload = async () => {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
                     
-                    detectedCodes.forEach(({code, position}) => {
-                        processDetectedCode(code, position);
-                    });
+                    // 長辺を1600pxに制限
+                    const maxSize = 1600;
+                    let width = img.width;
+                    let height = img.height;
                     
-                    updateDetectionStats(detectedCodes.length);
-                } else {
-                    document.getElementById('scanIndicator').className = 'scan-indicator scanning';
-                }
-            }
-            
-            updateReceiveStats();
-            requestAnimationFrame(tick);
-        }
-
-        // グリッドスキャン
-        function scanGrid() {
-            const detectedCodes = [];
-            const cellSize = canvasElement.width / GRID_SIZE; // canvasは既に正方形
-            
-            // オーバーレイのセルをリセット
-            for (let i = 0; i < TOTAL_CELLS; i++) {
-                document.getElementById(`scan-cell-${i}`).classList.remove('detected');
-            }
-            
-            for (let row = 0; row < GRID_SIZE; row++) {
-                for (let col = 0; col < GRID_SIZE; col++) {
-                    const x = col * cellSize;
-                    const y = row * cellSize;
-                    const cellIndex = row * GRID_SIZE + col;
+                    if (width > height && width > maxSize) {
+                        height = (height * maxSize) / width;
+                        width = maxSize;
+                    } else if (height > maxSize) {
+                        width = (width * maxSize) / height;
+                        height = maxSize;
+                    }
                     
+                    canvas.width = width;
+                    canvas.height = height;
+                    ctx.drawImage(img, 0, 0, width, height);
+                    
+                    canvas.toBlob((blob) => {
+                        resolve(blob);
+                    }, 'image/jpeg', 0.9);
+                };
+                
+                // HEICファイルの場合は変換
+                if (file.type === 'image/heic' || file.name.toLowerCase().endsWith('.heic')) {
                     try {
-                        // セル領域の画像データを取得
-                        const imageData = canvas.getImageData(x, y, cellSize, cellSize);
-                        
-                        // jsQRで検出
-                        const code = jsQR(imageData.data, cellSize, cellSize, {
-                            inversionAttempts: "dontInvert"
+                        // 動的にheic2anyをインポート
+                        const { default: heic2any } = await import('https://cdn.jsdelivr.net/npm/heic2any@0.0.4/+esm');
+                        const blob = await heic2any({
+                            blob: file,
+                            toType: 'image/jpeg',
+                            quality: 0.9
                         });
-                        
-                        if (code && code.data) {
-                            detectedCodes.push({
-                                code: code.data,
-                                position: cellIndex
-                            });
-                            
-                            // 検出されたセルをハイライト
-                            document.getElementById(`scan-cell-${cellIndex}`).classList.add('detected');
-                        }
+                        img.src = URL.createObjectURL(blob);
                     } catch (e) {
-                        // エラーは無視して次のセルへ
+                        console.error('HEIC変換エラー:', e);
+                        img.src = URL.createObjectURL(file);
                     }
+                } else {
+                    img.src = URL.createObjectURL(file);
                 }
-            }
-            
-            return detectedCodes;
+            });
         }
 
-        // 検出されたコードを処理
-        function processDetectedCode(codeData, position) {
-            try {
-                const data = JSON.parse(codeData);
-                
-                if (data.type === 'header') {
-                    addDebugLog(`ヘッダー受信 (位置${position}): ファイル名=${data.fileName}`, 'success');
-                    processHeader(data);
-                } else if (data.type === 'chunk') {
-                    if (!headerReceived) {
-                        addDebugLog('ヘッダー未受信のためチャンクをスキップ', 'warning');
-                    } else {
-                        if (!receivedChunks.hasOwnProperty(data.chunkIndex)) {
-                            addDebugLog(`新規チャンク受信 (位置${position}): インデックス=${data.chunkIndex}`, 'info');
-                            processChunk(data);
-                        }
-                    }
-                }
-            } catch (e) {
-                // JSON解析エラーは無視
-            }
-        }
-
-        // 検出統計更新
-        function updateDetectionStats(count) {
-            detectionStats.total += count;
-            detectionStats.currentSecondCount += count;
-            
-            const now = Date.now();
-            if (now - detectionStats.lastSecond >= 1000) {
-                detectionStats.perSecond = detectionStats.currentSecondCount;
-                detectionStats.currentSecondCount = 0;
-                detectionStats.lastSecond = now;
-            }
-            
-            detectionStats.avgPerFrame.push(count);
-            if (detectionStats.avgPerFrame.length > 60) {
-                detectionStats.avgPerFrame.shift();
-            }
-        }
-
-        // 受信統計更新
-        function updateReceiveStats() {
-            if (!receiveStartTime) return;
-            
-            const elapsed = Math.round((Date.now() - receiveStartTime) / 1000);
-            const avgDetections = detectionStats.avgPerFrame.length > 0 
-                ? (detectionStats.avgPerFrame.reduce((a, b) => a + b, 0) / detectionStats.avgPerFrame.length).toFixed(2)
-                : 0;
-            
-            document.getElementById('detectionsPerSecond').textContent = detectionStats.perSecond;
-            document.getElementById('avgDetectionsPerFrame').textContent = avgDetections;
-            document.getElementById('totalDetections').textContent = detectionStats.total;
-            document.getElementById('elapsedTime').textContent = elapsed;
-        }
-
-        // ヘッダー処理
-        function processHeader(data) {
-            if (!headerReceived || data.totalChunks !== totalChunks) {
-                headerReceived = true;
-                receivedFileName = data.fileName;
-                receivedFileType = data.fileType;
-                isCompressed = data.compressed || false;
-                totalChunks = data.totalChunks;
-                
-                addDebugLog(`ヘッダー処理完了: ${receivedFileName} (${totalChunks}チャンク)`, 'success');
-                
-                document.getElementById('receivedFileName').textContent = receivedFileName;
-                document.getElementById('totalCount').textContent = totalChunks;
-                document.getElementById('receiveInfo').style.display = 'block';
-                document.querySelector('#receiveSection .progress').style.display = 'block';
-                document.getElementById('receiveStatus').textContent = '📡 受信中...';
-                document.getElementById('receiveStatus').className = 'status-message status-sending';
-                
-                initChunkGrid('receive', totalChunks);
-                updateMissingChunks();
-            }
-        }
-
-        // チャンク処理
-        function processChunk(data) {
-            if (data.chunkIndex < 0 || data.chunkIndex >= totalChunks) {
-                addDebugLog(`無効なチャンクインデックス: ${data.chunkIndex}`, 'error');
+        // 画像解析処理
+        async function processImages() {
+            if (!azureEndpoint || !azureKey) {
+                alert('Azure Document Intelligenceの設定を入力してください');
                 return;
             }
             
-            if (receivedChunks.hasOwnProperty(data.chunkIndex)) {
+            if (capturedImageFiles.length === 0) {
+                alert('画像をキャプチャしてください');
                 return;
             }
             
-            receivedChunks[data.chunkIndex] = data.data;
+            document.getElementById('processBtn').disabled = true;
+            document.getElementById('captureStatus').textContent = '🔄 画像を解析中...';
+            document.getElementById('captureStatus').className = 'status-message status-processing';
+            document.getElementById('processProgress').style.display = 'block';
+            document.getElementById('receiveInfo').style.display = 'block';
             
-            updateChunkGrid('receive', data.chunkIndex, 'received');
+            receivedChunksData = {};
+            receivedFileInfo = null;
+            totalChunksCount = 0;
             
-            const indicator = document.querySelector(`#receiveChunkGrid .chunk-indicator:nth-child(${data.chunkIndex + 1})`);
-            if (indicator) {
-                indicator.style.animation = 'none';
-                setTimeout(() => {
-                    indicator.style.animation = 'receivedPulse 0.5s ease-out';
-                }, 10);
+            document.getElementById('totalImages').textContent = capturedImageFiles.length;
+            
+            for (let i = 0; i < capturedImageFiles.length; i++) {
+                document.getElementById('processedImages').textContent = i;
+                const progress = Math.round((i / capturedImageFiles.length) * 100);
+                document.getElementById('processProgressBar').style.width = progress + '%';
+                
+                try {
+                    // 画像をリサイズ
+                    const resizedBlob = await resizeImage(capturedImageFiles[i]);
+                    
+                    // Azure APIを呼び出し
+                    const results = await analyzeImageWithAzure(resizedBlob);
+                    
+                    // 結果を処理
+                    processAnalysisResults(results);
+                    
+                } catch (error) {
+                    console.error(`画像 ${i + 1} の解析エラー:`, error);
+                }
             }
             
-            addDebugLog(`チャンク ${data.chunkIndex + 1}/${totalChunks} を保存`, 'success');
+            document.getElementById('processedImages').textContent = capturedImageFiles.length;
+            document.getElementById('processProgressBar').style.width = '100%';
             
-            const receivedCount = Object.keys(receivedChunks).length;
-            const progress = Math.round(receivedCount / totalChunks * 100);
-            document.getElementById('receiveProgress').style.width = progress + '%';
-            document.getElementById('receiveProgress').textContent = progress + '%';
-            document.getElementById('receiveCount').textContent = receivedCount;
+            // 完了チェック
+            const receivedCount = Object.keys(receivedChunksData).length;
+            if (receivedFileInfo && receivedCount === totalChunksCount) {
+                document.getElementById('captureStatus').textContent = '✅ すべてのデータを受信しました！';
+                document.getElementById('captureStatus').className = 'status-message status-success';
+                document.getElementById('downloadBtn').style.display = 'inline-block';
+            } else {
+                const missing = [];
+                for (let i = 0; i < totalChunksCount; i++) {
+                    if (!receivedChunksData.hasOwnProperty(i)) {
+                        missing.push(i + 1);
+                    }
+                }
+                document.getElementById('captureStatus').textContent = `⚠️ 不足チャンク: ${missing.join(', ')}`;
+                document.getElementById('captureStatus').className = 'status-message status-error';
+            }
             
-            updateMissingChunks();
+            document.getElementById('processBtn').disabled = false;
+        }
+
+        // Azure Document Intelligence API呼び出し
+        async function analyzeImageWithAzure(imageBlob) {
+            const analyzeUrl = `${azureEndpoint}/documentintelligence/documentModels/prebuilt-read:analyze?api-version=2024-11-30&features=barcodes`;
             
-            if (receivedCount === totalChunks) {
-                const receiveTime = Math.round((Date.now() - receiveStartTime) / 1000);
-                addDebugLog(`全チャンク受信完了！ 所要時間: ${receiveTime}秒`, 'success');
-                document.getElementById('receiveStatus').textContent = `✅ 受信完了！（${receiveTime}秒）`;
-                document.getElementById('receiveStatus').className = 'status-message status-complete';
-                
-                const allIndicators = document.querySelectorAll('#receiveChunkGrid .chunk-indicator');
-                allIndicators.forEach(ind => {
-                    ind.style.animation = 'receivedPulse 0.3s ease-out';
+            // 画像をバイナリとして読み込み
+            const arrayBuffer = await imageBlob.arrayBuffer();
+            
+            // 解析リクエスト
+            const response = await fetch(analyzeUrl, {
+                method: 'POST',
+                headers: {
+                    'Ocp-Apim-Subscription-Key': azureKey,
+                    'Content-Type': 'application/octet-stream'
+                },
+                body: arrayBuffer
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Azure API エラー: ${response.status}`);
+            }
+            
+            // Operation-Locationヘッダーから結果URLを取得
+            const operationLocation = response.headers.get('Operation-Location');
+            if (!operationLocation) {
+                throw new Error('Operation-Location ヘッダーが見つかりません');
+            }
+            
+            // ポーリングして結果を取得
+            return await pollForResults(operationLocation);
+        }
+
+        // 結果のポーリング
+        async function pollForResults(operationUrl) {
+            const maxAttempts = 60;
+            const delay = 1000;
+            
+            for (let i = 0; i < maxAttempts; i++) {
+                const response = await fetch(operationUrl, {
+                    headers: {
+                        'Ocp-Apim-Subscription-Key': azureKey
+                    }
                 });
                 
-                stopScanning();
-                document.getElementById('downloadBtn').style.display = 'inline-block';
-            }
-        }
-
-        // 不足チャンク更新
-        function updateMissingChunks() {
-            const missing = [];
-            for (let i = 0; i < totalChunks; i++) {
-                if (!receivedChunks.hasOwnProperty(i)) {
-                    missing.push(i + 1);
+                if (!response.ok) {
+                    throw new Error(`ポーリングエラー: ${response.status}`);
                 }
+                
+                const result = await response.json();
+                
+                if (result.status === 'succeeded') {
+                    return result.analyzeResult;
+                } else if (result.status === 'failed') {
+                    throw new Error('解析が失敗しました');
+                }
+                
+                // まだ処理中の場合は待機
+                await new Promise(resolve => setTimeout(resolve, delay));
             }
             
-            if (missing.length === 0) {
-                document.getElementById('missingChunks').textContent = 'なし';
-            } else if (missing.length > 10) {
-                document.getElementById('missingChunks').textContent = `${missing.slice(0, 10).join(', ')}... 他${missing.length - 10}個`;
-            } else {
-                document.getElementById('missingChunks').textContent = missing.join(', ');
-            }
+            throw new Error('タイムアウト: 解析が完了しませんでした');
+        }
+
+        // 解析結果の処理
+        function processAnalysisResults(analyzeResult) {
+            if (!analyzeResult.pages) return;
+            
+            analyzeResult.pages.forEach(page => {
+                if (page.barcodes) {
+                    page.barcodes.forEach(barcode => {
+                        try {
+                            const data = JSON.parse(barcode.value);
+                            
+                            if (data.type === 'header') {
+                                // ヘッダー情報を保存
+                                receivedFileInfo = {
+                                    fileName: data.fileName,
+                                    fileType: data.fileType,
+                                    compressed: data.compressed
+                                };
+                                totalChunksCount = data.totalChunks;
+                                
+                                document.getElementById('receivedFileName').textContent = data.fileName;
+                                document.getElementById('totalChunks').textContent = totalChunksCount;
+                                
+                            } else if (data.type === 'chunk') {
+                                // チャンクデータを保存
+                                if (!receivedChunksData.hasOwnProperty(data.chunkIndex)) {
+                                    receivedChunksData[data.chunkIndex] = data.data;
+                                    document.getElementById('receivedChunks').textContent = Object.keys(receivedChunksData).length;
+                                }
+                            }
+                        } catch (e) {
+                            // JSON解析エラーは無視
+                        }
+                    });
+                }
+            });
         }
 
         // ファイルダウンロード
         function downloadFile() {
-            if (Object.keys(receivedChunks).length !== totalChunks) {
+            if (!receivedFileInfo || Object.keys(receivedChunksData).length !== totalChunksCount) {
                 alert('ファイルの受信が完了していません');
                 return;
             }
-
+            
             try {
+                // チャンクを結合
                 let completeData = '';
-                for (let i = 0; i < totalChunks; i++) {
-                    completeData += receivedChunks[i];
+                for (let i = 0; i < totalChunksCount; i++) {
+                    completeData += receivedChunksData[i];
                 }
-
+                
+                // Base64デコード
                 const binaryString = atob(completeData);
                 const bytes = new Uint8Array(binaryString.length);
                 for (let i = 0; i < binaryString.length; i++) {
                     bytes[i] = binaryString.charCodeAt(i);
                 }
-
+                
+                // 圧縮解除
                 let finalData = bytes;
-                if (isCompressed) {
+                if (receivedFileInfo.compressed) {
                     finalData = pako.inflate(bytes);
                 }
-
-                const blob = new Blob([finalData], { type: receivedFileType });
+                
+                // ダウンロード
+                const blob = new Blob([finalData], { type: receivedFileInfo.fileType });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = receivedFileName;
+                a.download = receivedFileInfo.fileName;
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
-
+                
                 // リセット
-                receivedChunks = {};
-                totalChunks = 0;
-                receivedFileName = '';
-                receivedFileType = '';
-                headerReceived = false;
+                capturedImageFiles = [];
+                updateCapturedImagesDisplay();
+                receivedChunksData = {};
+                receivedFileInfo = null;
+                totalChunksCount = 0;
                 document.getElementById('downloadBtn').style.display = 'none';
-                document.getElementById('receiveProgress').style.width = '0%';
-                document.getElementById('receiveProgress').textContent = '0%';
-                document.getElementById('receiveChunkGrid').innerHTML = '';
-                document.getElementById('receiveChunkGrid').style.display = 'none';
+                document.getElementById('processBtn').style.display = 'none';
                 document.getElementById('receiveInfo').style.display = 'none';
-                document.getElementById('receiveStatus').style.display = 'none';
-                document.getElementById('receiveStats').style.display = 'none';
-            } catch (e) {
-                alert('ファイルのダウンロードに失敗しました: ' + e.message);
-                console.error('ダウンロードエラー:', e);
+                document.getElementById('processProgress').style.display = 'none';
+                document.getElementById('captureStatus').style.display = 'none';
+                
+            } catch (error) {
+                alert('ダウンロードエラー: ' + error.message);
             }
         }
-    </script>
-    <script>
-    // jsQRライブラリの読み込み確認
-    window.addEventListener('DOMContentLoaded', function() {
-        if (typeof jsQR === 'undefined') {
-            console.error('jsQRライブラリが読み込まれていません');
-            const script = document.createElement('script');
-            script.src = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js';
-            script.onload = function() {
-                console.log('jsQRライブラリを再読み込みしました');
-            };
-            document.head.appendChild(script);
-        } else {
-            console.log('jsQRライブラリは正常に読み込まれています');
-        }
-    });
-    
-    // ウィンドウリサイズ時の処理
-    let resizeTimeout;
-    window.addEventListener('resize', function() {
-        clearTimeout(resizeTimeout);
-        resizeTimeout = setTimeout(function() {
-            if (currentMode === 'send' && fileData && document.getElementById('qrGrid').children.length > 0) {
-                // 現在のページを再表示
-                displayGridPage(currentGridPage);
-            }
-        }, 300);
-    });
     </script>
 </body>
 </html>
