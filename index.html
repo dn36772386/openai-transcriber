@@ -436,7 +436,16 @@
             margin-top: 0;
         }
         
-        /* モバイル対応 */
+        .qr-info {
+            background-color: #e8f4fd;
+            border: 1px solid #0066cc;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 12px;
+            word-break: break-all;
+        }
         @media (max-width: 768px) {
             .container {
                 padding: 20px;
@@ -636,7 +645,6 @@
         let videoStream = null;
         let isMonitoring = false;
         let lastQRContent = null;
-        let monitoringIntervalId = null;
         let capturedPages = new Set(); // 撮影済みページ番号
         let expectedTotalPages = 0;
         
@@ -1082,8 +1090,9 @@
                     document.getElementById('captureIndicator').textContent = '👀 監視中';
                     document.getElementById('captureStatus').textContent = '👀 左上のQRコードを監視中...';
                     
-                    // 監視を開始（100msごとにチェック）
-                    monitoringIntervalId = setInterval(monitorQRChange, 100);
+                    // requestAnimationFrameで監視を開始
+                    console.log('QRコード監視を開始します');
+                    requestAnimationFrame(() => monitorQRChange());
                 };
                 
             } catch (error) {
@@ -1114,60 +1123,97 @@
                 const imageData = ctx.getImageData(0, 0, cellWidth, cellHeight);
                 
                 // jsQRでQRコードを読み取り
-                const code = jsQR(imageData.data, cellWidth, cellHeight);
+                const code = jsQR(imageData.data, cellWidth, cellHeight, {
+                    inversionAttempts: "dontInvert"
+                });
                 
                 if (code && code.data) {
-                    // QRコードの内容が変わったかチェック
-                    if (lastQRContent !== code.data) {
-                        console.log('QRコード変化検知:', code.data.substring(0, 100) + '...');
-                        lastQRContent = code.data;
+                    try {
+                        const qrData = JSON.parse(code.data);
                         
-                        try {
-                            const qrData = JSON.parse(code.data);
-                            console.log('QRデータ解析結果:', qrData);
+                        // ページ番号を持つQRコードかチェック
+                        if (qrData.pageNumber !== undefined) {
+                            const currentPageStr = `page_${qrData.pageNumber}`;
                             
-                            // ヘッダーから総ページ数を取得
-                            if (qrData.type === 'header' && qrData.totalPages) {
-                                expectedTotalPages = qrData.totalPages;
-                                document.getElementById('expectedPages').textContent = expectedTotalPages;
-                                updatePageStatusDisplay();
-                                console.log(`総ページ数: ${expectedTotalPages}`);
-                            }
-                            
-                            // ページ番号を記録（header, page, chunkすべてにpageNumberが含まれる）
-                            if (qrData.pageNumber !== undefined) {
+                            // 前回と異なるページ番号の場合
+                            if (lastQRContent !== currentPageStr) {
+                                console.log(`ページ変化検知: ${lastQRContent} → ${currentPageStr}`);
+                                lastQRContent = currentPageStr;
+                                
+                                // ヘッダーから総ページ数を取得
+                                if (qrData.type === 'header' && qrData.totalPages) {
+                                    expectedTotalPages = qrData.totalPages;
+                                    document.getElementById('expectedPages').textContent = expectedTotalPages;
+                                    updatePageStatusDisplay();
+                                    console.log(`総ページ数: ${expectedTotalPages}`);
+                                }
+                                
                                 const pageNum = qrData.pageNumber;
-                                console.log(`ページ番号検出: ${pageNum}`);
                                 
                                 // まだ撮影していないページなら撮影
                                 if (!capturedPages.has(pageNum)) {
+                                    // 変化を検知したら即座に状態を更新
+                                    document.getElementById('captureIndicator').textContent = '⏳ 準備中';
+                                    document.getElementById('captureIndicator').style.backgroundColor = '#ffc107';
+                                    
                                     const delay = parseInt(document.getElementById('captureDelay').value);
                                     console.log(`${delay}ms後に撮影実行`);
                                     
                                     setTimeout(() => {
-                                        captureImage(pageNum);
-                                        document.getElementById('captureStatus').textContent = 
-                                            `📸 ページ ${pageNum + 1} を撮影！（${capturedPages.size}/${expectedTotalPages}ページ）`;
+                                        // 再度ページ番号を確認（撮影時に画面が変わっていないか）
+                                        const verifyCtx = canvas.getContext('2d');
+                                        verifyCtx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                                        const verifyImageData = verifyCtx.getImageData(0, 0, cellWidth, cellHeight);
+                                        const verifyCode = jsQR(verifyImageData.data, cellWidth, cellHeight, {
+                                            inversionAttempts: "dontInvert"
+                                        });
                                         
-                                        // 全ページ撮影完了チェック
-                                        if (expectedTotalPages > 0 && capturedPages.size >= expectedTotalPages) {
-                                            document.getElementById('captureStatus').textContent = 
-                                                '✅ 全ページの撮影が完了しました！';
-                                            document.getElementById('captureStatus').className = 'status-message status-success';
-                                            stopAutoCapture();
+                                        if (verifyCode && verifyCode.data) {
+                                            try {
+                                                const verifyData = JSON.parse(verifyCode.data);
+                                                if (verifyData.pageNumber === pageNum) {
+                                                    // ページが同じなら撮影
+                                                    captureImage(pageNum);
+                                                    document.getElementById('captureStatus').textContent = 
+                                                        `📸 ページ ${pageNum + 1} を撮影！（${capturedPages.size}/${expectedTotalPages}ページ）`;
+                                                    
+                                                    // 全ページ撮影完了チェック
+                                                    if (expectedTotalPages > 0 && capturedPages.size >= expectedTotalPages) {
+                                                        document.getElementById('captureStatus').textContent = 
+                                                            '✅ 全ページの撮影が完了しました！';
+                                                        document.getElementById('captureStatus').className = 'status-message status-success';
+                                                        stopAutoCapture();
+                                                    }
+                                                } else {
+                                                    console.log('撮影前にページが変わったためスキップ');
+                                                }
+                                            } catch (e) {
+                                                console.error('検証時のJSON解析エラー:', e);
+                                            }
                                         }
                                     }, delay);
                                 } else {
                                     console.log(`ページ ${pageNum} は既に撮影済み`);
                                 }
                             }
-                        } catch (e) {
-                            console.error('JSON解析エラー:', e);
                         }
+                    } catch (e) {
+                        // JSON解析エラーは無視（QRコードではない可能性）
+                    }
+                } else {
+                    // QRコードが検出されない場合
+                    if (lastQRContent !== null && lastQRContent !== 'no_qr') {
+                        console.log('QRコードが検出されなくなりました');
+                        lastQRContent = 'no_qr';
                     }
                 }
             } catch (e) {
                 // QRコード読み取りエラーは無視（頻繁に発生するため）
+            }
+            
+            // 次のフレームを要求
+            if (isMonitoring) {
+                requestAnimationFrame(() => monitorQRChange());
             }
         }
 
@@ -1246,11 +1292,6 @@
         // 自動撮影停止
         function stopAutoCapture() {
             isMonitoring = false;
-            
-            if (monitoringIntervalId) {
-                clearInterval(monitoringIntervalId);
-                monitoringIntervalId = null;
-            }
             
             if (videoStream) {
                 videoStream.getTracks().forEach(track => track.stop());
